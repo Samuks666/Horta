@@ -1,16 +1,28 @@
+/*
+    Arquivo base para implementação de uma IA 
+    usando algortimo de KNN no esp32 para a 
+    predição de irrigação de plantas com base 
+    na leitura de sensores:
+    
+    DHT11 - Temperatura e Umidade do ar 
+    XXXXX - Temperatura e Umidade do solo
+    XXXXX - Pressão do ar
+    XXXXX - Chuva 
+    
+*/
 #include <SPIFFS.h>
 #include <Arduino.h>
 #include <math.h>
 #include <string.h>
 
-#define NUM_SENSORS 7  // Número de características
-#define NUM_TRAINING 100  // Número de amostras no dataset
+#define NUM_SENSORS 7  // Número de Sensores
+#define NUM_TRAINING 100  // Número de amostras
 
-// Estrutura para armazenar dados
 float X[NUM_TRAINING][NUM_SENSORS];
 int y[NUM_TRAINING];
 
-// Função para carregar os dados do arquivo .npy
+// Função para carregar os dados do arquivo .npy 
+// Gerado pelo treinamento da IA KNN usando python
 void loadData() {
     File X_file = SPIFFS.open("/X_train.npy", "r");
     File y_file = SPIFFS.open("/y_train.npy", "r");
@@ -30,6 +42,7 @@ void loadData() {
 }
 
 // Função de cálculo da distância Euclidiana
+// Determina a similaridade entre os dados 
 float euclideanDistance(float a[], float b[]) {
     float sum = 0;
     for (int i = 0; i < NUM_SENSORS; i++) {
@@ -39,6 +52,7 @@ float euclideanDistance(float a[], float b[]) {
 }
 
 // Função para predizer se deve regar ou não
+// Com base nos vetores exportados do KNN
 int predict(float input[]) {
     float distances[NUM_TRAINING];
     int sortedIndices[NUM_TRAINING];
@@ -71,6 +85,7 @@ int predict(float input[]) {
 }
 
 void setup() {
+    //Incia a conexão com USB para leitura/escrita
     Serial.begin(115200);
 
     // Iniciar o SPIFFS
@@ -82,7 +97,7 @@ void setup() {
     // Carregar dados de treinamento
     loadData();
 
-    // Exemplo de entrada para previsão
+    // Teste de entrada para previsão
     float newData[NUM_SENSORS] = {30.0, 25.0, 5.0, 20.0, 65.0, 1010.0, 0.0};
     int decision = predict(newData);
 
@@ -91,5 +106,5 @@ void setup() {
 }
 
 void loop() {
-    // Lógica adicional para o loop, se necessário
+    
 }
