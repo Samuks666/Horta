@@ -1,3 +1,14 @@
+/*
+    Arquivo base para implementação sem uso de IA
+    apenas regras truncadas no esp32 para ocontrole 
+    de irrigação de plantas com base nos sensores:
+    
+    DHT11 - Temperatura e Umidade do ar 
+    XXXXX - Temperatura e Umidade do solo
+    XXXXX - Pressão do ar
+    XXXXX - Chuva 
+    
+*/
 #include <WiFi.h>
 #include <DHT.h>
 
@@ -9,6 +20,7 @@
 #define RELAY_PIN 12        // Pino para controle do relé da bomba
 
 // Configuração do Wi-Fi
+// Para redes básicas
 const char* ssid = "Seu_SSID";
 const char* password = "Sua_Senha";
 
@@ -16,7 +28,7 @@ const char* password = "Sua_Senha";
 DHT dht(DHTPIN, DHTTYPE);
 
 // Variáveis para sensores
-float temperature, humidity, soilMoisture, rainStatus;
+float temperature, humidity, soilMoisture, soilTemperature, rainStatus, airPressure;
 
 void setup() {
     // Iniciando o serial e o Wi-Fi
@@ -59,8 +71,8 @@ void loop() {
     Serial.print("\tChuva: ");
     Serial.println(rainStatus == HIGH ? "Chovendo" : "Não chovendo");
 
-    // Lógica para controle de irrigação
-    if (rainStatus == LOW && soilMoisture < 500 && temperature > 25) {  // Se não estiver chovendo, umidade do solo for baixa e temperatura alta
+    // Lógica para controle de irrigação bem básica só template
+    if (rainStatus == LOW && soilMoisture < 500 && temperature > 25) {
         Serial.println("Regando a horta...");
         digitalWrite(RELAY_PIN, HIGH); // Acionar a bomba
         delay(10000);  // Bombear por 10 segundos (ajuste conforme necessário)
