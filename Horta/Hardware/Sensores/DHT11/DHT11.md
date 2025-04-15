@@ -1,10 +1,20 @@
 # Sensor DHT11
 
-O sensor DHT11 é amplamente utilizado para medir temperatura e umidade em projetos de eletrônica e automação. Ele é conhecido por sua simplicidade e custo acessível.
+O sensor DHT11 é utilizado para medir temperatura, umidade e sensação térmica.
 
-![Descrição da Imagem](caminho/para/imagem.png)
+<img src="OIP.jpg" alt="Sensor DHT11" width="300">
 
----
+# Dados Técnicos do Sensor DHT11
+
+| Característica        | Descrição                              |
+|-----------------------|----------------------------------------|
+| Tipo                  | Sensor digital de temperatura e umidade |
+| Tensão de Operação    | 3.3V a 5.5V                           |
+| Faixa de Temperatura  | 0°C a 50°C                            |
+| Precisão Temperatura  | ±2°C                                  |
+| Faixa de Umidade      | 20% a 90%                             |
+| Precisão Umidade      | ±5%                                   |
+| Tempo de Resposta     | 2 segundos                            |
 
 ## Pinagem do DHT11
 
@@ -15,16 +25,12 @@ O sensor DHT11 é amplamente utilizado para medir temperatura e umidade em proje
 | 3    | Não Conectado   | Não utilizado                |
 | 4    | GND             | Terra (Ground)               |
 
----
-
 ## Recomendações
 
 - **Uso de resistor**: Para comunicação estável, recomenda-se o uso de um resistor pull-up de 5kΩ-10kΩ entre o pino de dados e o VCC.
 - **Capacitor**: Em ambientes ruidosos, você pode usar um capacitor de desacoplamento (100nF) entre o VCC e o GND.
 
----
-
-## Exemplo de Código (Arduino)
+## Exemplo de Código
 
 Segue um exemplo de código para leitura de dados do DHT11 usando Arduino:
 
@@ -60,5 +66,23 @@ void loop() {
   Serial.print(umidade);
   Serial.println(" %");
   
-  delay(1000); // Intervalo de 1 segundos entre leituras
+  delay(2000); // Intervalo de 1 segundos entre leituras
 }
+```
+
+#Saída no Terminal
+
+-Teste de 8 segundosn total de 4 leituras
+
+```
+  Iniciando leitura do DHT11
+  Temperatura: 25.60 °C
+  Umidade: 59.00 %
+  Temperatura: 25.60 °C
+  Umidade: 59.00 %
+  Temperatura: 25.60 °C
+  Umidade: 59.00 %
+  Temperatura: 25.60 °C
+  Umidade: 59.00 %
+```
+
