@@ -38,7 +38,7 @@ Segue um exemplo de código para leitura de dados do DHT11 usando Arduino:
 #include <DHT.h> // Biblioteca Necessária
 
 // Definir o pino do sensor e o tipo
-#define DHTPIN 2 // Pino de dados conectado ao pino digital 2
+#define DHTPIN 4 // Pino de dados conectado ao pino digital 2
 #define DHTTYPE DHT11 // Definir o modelo do sensor (DHT11)
 
 DHT dht(DHTPIN, DHTTYPE);
