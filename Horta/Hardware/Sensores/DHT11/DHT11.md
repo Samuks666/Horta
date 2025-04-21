@@ -2,7 +2,7 @@
 
 O sensor DHT11 é utilizado para medir temperatura, umidade e sensação térmica.
 
-<img src="OIP.jpg" alt="Sensor DHT11" width="300">
+<img src="DHT11.jpg" alt="Sensor DHT11" width="300">
 
 # Dados Técnicos do Sensor DHT11
 
