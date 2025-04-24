@@ -3,26 +3,24 @@
     apenas regras truncadas no esp32 para ocontrole 
     de irrigação de plantas com base nos sensores:
     
-    DHT11 - Temperatura e Umidade do ar 
-    XXXXX - Temperatura e Umidade do solo
+    DHT11 - Temperatura e Umidade do ar
+    FC-28 -  Umidade do solo
+    FC-37 - Chuva 
     XXXXX - Pressão do ar
-    XXXXX - Chuva 
-    
 */
-#include <WiFi.h>
+//#include <WiFi.h>
 #include <DHT.h>
 
-// Definindo os pinos
-#define DHTPIN 4       // Pino do DHT11
-#define DHTTYPE DHT11  // Tipo de sensor DHT
-#define SOIL_MOISTURE_PIN 34 // Pino do sensor de umidade do solo
-#define RAIN_SENSOR_PIN 35   // Pino do sensor de chuva
-#define RELAY_PIN 12        // Pino para controle do relé da bomba
+// Definições de pinos dos sensores
+#define DHTPIN 4                // Pino do sensor DHT11
+#define DHTTYPE DHT11           // Tipo de sensor DHT
+#define SOIL_MOISTURE_PIN 5     // Pino do sensor de umidade do solo FC-28
+#define RAIN_SENSOR_PIN 14      // Pino analógico do sensor de chuva FC-37
 
 // Configuração do Wi-Fi
 // Para redes básicas
-const char* ssid = "Seu_SSID";
-const char* password = "Sua_Senha";
+// const char* ssid = "Seu_SSID";
+// const char* password = "Sua_Senha";
 
 // Inicializando o sensor DHT
 DHT dht(DHTPIN, DHTTYPE);
@@ -31,55 +29,57 @@ DHT dht(DHTPIN, DHTTYPE);
 float temperature, humidity, soilMoisture, soilTemperature, rainStatus, airPressure;
 
 void setup() {
-    // Iniciando o serial e o Wi-Fi
-    Serial.begin(115200);
-    WiFi.begin(ssid, password);
+  // Inicializa monitor serial
+  Serial.begin(115200);
 
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(1000);
-        Serial.println("Conectando ao Wi-Fi...");
-    }
+  // Configuração dos pinos
+  pinMode(SOIL_MOISTURE_PIN, INPUT);
+  pinMode(RAIN_SENSOR_PIN, INPUT);
 
-    Serial.println("Conectado ao Wi-Fi");
-
-    dht.begin();
-
-    // Inicializando o pino do relé
-    pinMode(RELAY_PIN, OUTPUT);
+  // Inicializa o sensor DHT
+  dht.begin();
 }
 
 void loop() {
-    // Leitura dos sensores
-    temperature = dht.readTemperature();    // Temperatura (C)
-    humidity = dht.readHumidity();          // Umidade do ar (%)
-    soilMoisture = analogRead(SOIL_MOISTURE_PIN);  // Umidade do solo (valor analógico)
-    rainStatus = digitalRead(RAIN_SENSOR_PIN);     // Sensor de chuva (HIGH ou LOW)
-
-    // Verificar se as leituras são válidas
-    if (isnan(temperature) || isnan(humidity)) {
-        Serial.println("Falha na leitura do sensor DHT!");
+    // Leitura do sensor de temperatura e umidade do ar
+    float temperatura = dht.readTemperature();
+    float umidadeAr = dht.readHumidity();
+    
+    // Valida as leituras do DHT11
+    if (isnan(temperatura) || isnan(umidadeAr)) {
+        Serial.println("Erro ao ler o sensor DHT11!");
+        delay(2000);
         return;
     }
-
-    // Exibir os valores lidos no Serial Monitor
+    
+    // Leitura do sensor de umidade do solo
+    int umidadeSolo = analogRead(SOIL_MOISTURE_PIN);
+    
+    // Leitura analógica do sensor de chuva
+    int valorChuva = analogRead(RAIN_SENSOR_PIN);
+    
+    // Exibe os valores lidos no monitor serial
     Serial.print("Temperatura: ");
-    Serial.print(temperature);
-    Serial.print(" C\tUmidade do Ar: ");
-    Serial.print(humidity);
-    Serial.print(" %\tUmidade do Solo: ");
-    Serial.print(soilMoisture);
-    Serial.print("\tChuva: ");
-    Serial.println(rainStatus == HIGH ? "Chovendo" : "Não chovendo");
+    Serial.print(temperatura);
+    Serial.print(" °C, Umidade do Ar: ");
+    Serial.print(umidadeAr);
+    Serial.print(" %, Umidade do Solo: ");
+    Serial.print(umidadeSolo);
+    Serial.print(", Nível de Chuva (Analógico): ");
+    Serial.println(valorChuva);
 
-    // Lógica para controle de irrigação bem básica só template
-    if (rainStatus == LOW && soilMoisture < 500 && temperature > 25) {
-        Serial.println("Regando a horta...");
-        digitalWrite(RELAY_PIN, HIGH); // Acionar a bomba
-        delay(10000);  // Bombear por 10 segundos (ajuste conforme necessário)
-        digitalWrite(RELAY_PIN, LOW);  // Desligar a bomba
+    // Lógica de irrigação
+    if (valorChuva > 2000) { // Está chovendo
+        Serial.println("Chuva detectada. Irrigação desativada.");
+    } else if (umidadeSolo < 500) { // Solo seco
+        if (temperatura > 25.0 && umidadeAr < 50.0) { // Clima quente e seco
+          Serial.println("Condições críticas detectadas. Acionando irrigação...");
+        } else {
+              Serial.println("Solo seco, mas condições climáticas não são críticas. Irrigação desativada.");
+        }
     } else {
-        Serial.println("Não é necessário regar.");
+        Serial.println("Condições normais. Irrigação desativada.");
     }
-
-    delay(5000);  // Espera 5 segundos para a próxima leitura
+    
+    delay(2000); // Aguarda 2 segundos antes da próxima leitura
 }
