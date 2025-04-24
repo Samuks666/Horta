@@ -5,11 +5,12 @@
     na leitura de sensores:
     
     DHT11 - Temperatura e Umidade do ar 
-    XXXXX - Temperatura e Umidade do solo
+    FC-28 - Umidade do solo
+    FC-37 - Chuva 
     XXXXX - Pressão do ar
-    XXXXX - Chuva 
     
 */
+
 #include <SPIFFS.h>
 #include <Arduino.h>
 #include <math.h>
