@@ -1,18 +1,18 @@
 """
-Script para treinar um modelo KNN usando dados de sensores
-(Umidade e Temperatura do Ar, Umidade do Solo e Precipitação).
-Inclui funcionalidades para carregar, preprocessar,
-treinar e salvar o modelo para rodar em um esp32.
+    Script (Otimizado) para treinar um modelo KNN usando dados de sensores
+    (Umidade e Temperatura do Ar, Umidade do Solo e Precipitação).
+    Inclui funcionalidades para carregar, preprocessar,
+    treinar e salvar o modelo para rodar em um esp32.
+    Inclui redução de dados de treinamento com KMeans.
 """
 
 # Importações necessárias
 import os
-import pickle
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.cluster import KMeans
 
 # Constantes
 DATASET_PATH = "TARP.csv"
@@ -20,6 +20,7 @@ N_NEIGHBORS = 3
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
 N_ROWS = 2205  # Número de linhas a serem carregadas do dataset
+N_CLUSTERS = 50  # Número de clusters para reduzir os dados de treinamento
 
 def load_dataset(filepath, nrows):
     """Carrega as primeiras `nrows` linhas do dataset e realiza validações."""
@@ -60,6 +61,22 @@ def preprocess_data(df):
     y = df['Status'].values
     return X, y
 
+def reduce_training_data(X_train, y_train, n_clusters):
+    """Reduz os dados de treinamento usando KMeans."""
+    print(f"Reduzindo os dados de treinamento para {n_clusters} clusters...")
+    kmeans = KMeans(n_clusters=n_clusters, random_state=RANDOM_STATE)
+    kmeans.fit(X_train)
+    X_reduced = kmeans.cluster_centers_
+    
+    # Determinar o rótulo mais comum em cada cluster
+    y_reduced = []
+    for center in X_reduced:
+        distances = np.linalg.norm(X_train - center, axis=1)
+        closest_points = np.argsort(distances)[:5]  # Pega os 5 pontos mais próximos
+        labels = y_train[closest_points]
+        y_reduced.append(np.bincount(labels).argmax())  # Classe majoritária
+    return X_reduced, np.array(y_reduced)
+
 def save_to_header(filename, var_name, array):
     """Salva um array em formato de arquivo de cabeçalho C++."""
     print(f"Salvando {var_name} em {filename}...")
@@ -99,32 +116,17 @@ def main():
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
-    # Treinar o modelo KNN
-    print(f"Treinando o modelo KNN com {N_NEIGHBORS} vizinhos...")
-    knn = KNeighborsClassifier(n_neighbors=N_NEIGHBORS)
-    knn.fit(X_train, y_train)
+    # Reduzir os dados de treinamento
+    X_train_reduced, y_train_reduced = reduce_training_data(X_train, y_train, N_CLUSTERS)
 
-    # Avaliar o modelo
-    accuracy = knn.score(X_test, y_test)
-    print(f"Acurácia do modelo: {accuracy * 100:.2f}%")
+    # Salvar os dados reduzidos e os parâmetros de padronização
+    save_to_header('X_train_reduced.h', 'X_train_reduced', X_train_reduced)
+    save_labels('y_train_reduced.h', 'y_train_reduced', y_train_reduced)
 
-    # Salvar os dados de treino e teste
-    save_to_header('X_train.h', 'X_train', X_train)
-    save_to_header('X_test.h', 'X_test', X_test)
-    save_labels('y_train.h', 'y_train', y_train)
-    save_labels('y_test.h', 'y_test', y_test)
-
-    # Salvar o modelo e o scaler
-    print("Salvando o modelo e o scaler...")
-    with open('knn_model.pkl', 'wb') as model_file:
-        pickle.dump(knn, model_file)
-    with open('scaler.pkl', 'wb') as scaler_file:
-        pickle.dump(scaler, scaler_file)
-
-    # Salvar as previsões
-    print("Salvando as previsões...")
-    predictions = knn.predict(X_test)
-    np.save('predictions.npy', predictions)
+    # Salvar os parâmetros de padronização
+    print("Salvando os parâmetros de padronização...")
+    np.save('scaler_mean.npy', scaler.mean_)
+    np.save('scaler_scale.npy', scaler.scale_)
 
     print("Processo concluído com sucesso!")
 
