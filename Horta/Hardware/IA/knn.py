@@ -77,28 +77,35 @@ def reduce_training_data(X_train, y_train, n_clusters):
         y_reduced.append(np.bincount(labels).argmax())  # Classe majoritária
     return X_reduced, np.array(y_reduced)
 
-def save_to_header(filename, var_name, array):
-    """Salva um array em formato de arquivo de cabeçalho C++."""
-    print(f"Salvando {var_name} em {filename}...")
+def save_to_single_header(filename, X_reduced, y_reduced, mean, scale):
+    """Salva todos os dados necessários em um único arquivo de cabeçalho C++."""
+    print(f"Salvando todos os dados em {filename}...")
     with open(filename, 'w') as f:
-        f.write(f'#ifndef {var_name.upper()}_H\n')
-        f.write(f'#define {var_name.upper()}_H\n\n')
-        f.write(f'static const float {var_name}[] = {{\n')
-        for row in array:
+        f.write(f'#ifndef MODEL_DATA_H\n')
+        f.write(f'#define MODEL_DATA_H\n\n')
+
+        # Salvar os clusters reduzidos
+        f.write(f'static const float X_train_reduced[] = {{\n')
+        for row in X_reduced:
             f.write('    ' + ', '.join(f'{x:.6f}' for x in row) + ',\n')
         f.write('};\n\n')
-        f.write(f'#endif // {var_name.upper()}_H\n')
 
-def save_labels(filename, var_name, array):
-    """Salva os rótulos em formato de arquivo de cabeçalho C++."""
-    print(f"Salvando {var_name} em {filename}...")
-    with open(filename, 'w') as f:
-        f.write(f'#ifndef {var_name.upper()}_H\n')
-        f.write(f'#define {var_name.upper()}_H\n\n')
-        f.write(f'static const int {var_name}[] = {{\n')
-        f.write(', '.join(map(str, array)) + '\n')
+        # Salvar os rótulos reduzidos
+        f.write(f'static const int y_train_reduced[] = {{\n')
+        f.write('    ' + ', '.join(map(str, y_reduced)) + '\n')
         f.write('};\n\n')
-        f.write(f'#endif // {var_name.upper()}_H\n')
+
+        # Salvar a média para padronização
+        f.write(f'static const float scaler_mean[] = {{\n')
+        f.write('    ' + ', '.join(f'{x:.6f}' for x in mean) + '\n')
+        f.write('};\n\n')
+
+        # Salvar o desvio padrão para padronização
+        f.write(f'static const float scaler_scale[] = {{\n')
+        f.write('    ' + ', '.join(f'{x:.6f}' for x in scale) + '\n')
+        f.write('};\n\n')
+
+        f.write(f'#endif // MODEL_DATA_H\n')
 
 def main():
     """Função principal para executar o pipeline de treinamento do modelo."""
@@ -119,14 +126,14 @@ def main():
     # Reduzir os dados de treinamento
     X_train_reduced, y_train_reduced = reduce_training_data(X_train, y_train, N_CLUSTERS)
 
-    # Salvar os dados reduzidos e os parâmetros de padronização
-    save_to_header('X_train_reduced.h', 'X_train_reduced', X_train_reduced)
-    save_labels('y_train_reduced.h', 'y_train_reduced', y_train_reduced)
-
-    # Salvar os parâmetros de padronização
-    print("Salvando os parâmetros de padronização...")
-    np.save('scaler_mean.npy', scaler.mean_)
-    np.save('scaler_scale.npy', scaler.scale_)
+    # Salvar todos os dados em um único arquivo de cabeçalho
+    save_to_single_header(
+        'model_data.h',
+        X_train_reduced,
+        y_train_reduced,
+        scaler.mean_,
+        scaler.scale_
+    )
 
     print("Processo concluído com sucesso!")
 
