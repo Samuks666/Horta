@@ -1,0 +1,33 @@
+name: Sync Wiki
+
+on:
+  push:
+    paths:
+      - '**/*.md' # Acione o workflow quando arquivos .md forem alterados
+
+jobs:
+  sync-wiki:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout código principal
+      uses: actions/checkout@v3
+
+    - name: Checkout da Wiki
+      uses: actions/checkout@v3
+      with:
+        repository: ${{ github.repository }}.wiki.git # Faz checkout da Wiki
+        path: wiki
+
+    - name: Copiar arquivos .md
+      run: |
+        cp -r *.md wiki/
+
+    - name: Subir alterações para a Wiki
+      run: |
+        cd wiki
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add .
+        git commit -m "Atualizando Wiki com base nos arquivos .md do repositório"
+        git push
