@@ -16,23 +16,26 @@ jobs:
     - name: Check if Wiki exists
       id: check-wiki
       run: |
-        git ls-remote https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git
-      continue-on-error: true
+        if git ls-remote https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git; then
+          echo "wiki_exists=true" >> $GITHUB_ENV
+        else
+          echo "wiki_exists=false" >> $GITHUB_ENV
+        fi
 
     - name: Checkout da Wiki
-      if: steps.check-wiki.outcome == 'success'
+      if: env.wiki_exists == 'true'
       uses: actions/checkout@v3
       with:
         repository: ${{ github.repository }}.wiki.git
         path: wiki
 
     - name: Copiar arquivos .md
-      if: steps.check-wiki.outcome == 'success'
+      if: env.wiki_exists == 'true'
       run: |
         cp -r *.md wiki/
 
     - name: Subir alterações para a Wiki
-      if: steps.check-wiki.outcome == 'success'
+      if: env.wiki_exists == 'true'
       run: |
         cd wiki
         git config user.name "github-actions[bot]"
