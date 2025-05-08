@@ -1,14 +1,14 @@
 /*
-    Arquivo base para implementação sem uso de IA
-    apenas regras truncadas no esp32 para ocontrole 
-    de irrigação de plantas com base nos sensores:
-    
-    DHT11 - Temperatura e Umidade do ar
-    FC-28 -  Umidade do solo
-    FC-37 - Chuva 
-    XXXXX - Pressão do ar
-*/
+    Arquivo principal para controle de irrigação automatizada utilizando ESP32.
+    Este código implementa a lógica de controle baseada em regras truncadas 
+    sem o uso de inteligência artificial.
 
+    Sensores utilizados:
+    - DHT11: Medição de temperatura e umidade do ar.
+    - FC-28: Monitoramento da umidade do solo.
+    - FC-37: Detecção de chuva.
+    - XXXXX: Medição de pressão atmosférica (não implementado neste exemplo).
+*/
 #include <esp_now.h>
 #include <WiFi.h>
 #include <DHT.h>
@@ -18,6 +18,7 @@
 #define DHTTYPE DHT11           // Tipo de sensor DHT
 #define SOIL_MOISTURE_PIN 5     // Pino do sensor de umidade do solo FC-28
 #define RAIN_SENSOR_PIN 14      // Pino analógico do sensor de chuva FC-37
+//#define RELAY_PIN 2           // Pino do relé para controle da bomba de irrigação (opcional)
 
 // Inicializando o sensor DHT
 DHT dht(DHTPIN, DHTTYPE);
@@ -28,7 +29,6 @@ typedef struct {
     float umidadeAr;
     int umidadeSolo;
     int valorChuva;
-    bool irrigar; // Comando de irrigação
 } SensorData;
 
 SensorData sensorData;
@@ -97,24 +97,22 @@ void readSensors() {
 // Executa a lógica de irrigação
 void checkIrrigationLogic() {
     if (sensorData.valorChuva > 2000) { // Está chovendo
-        sensorData.irrigar = false;
+   
         Serial.println("Chuva detectada. Irrigação desativada.");
     } else if (sensorData.umidadeSolo < 400) { // Solo muito seco
         if (sensorData.temperatura > 22.0 && sensorData.umidadeAr < 60.0) { // Clima quente e seco
-            sensorData.irrigar = true;
+            
             Serial.println("Condições críticas detectadas. Acionando irrigação...");
         } else if (sensorData.temperatura > 18.0 && sensorData.umidadeAr < 70.0) { // Clima moderado
-            sensorData.irrigar = true;
+            
             Serial.println("Condições moderadas detectadas. Acionando irrigação...");
         } else {
-            sensorData.irrigar = false;
+            
             Serial.println("Solo seco, mas condições climáticas não justificam irrigação. Irrigação desativada.");
         }
     } else if (sensorData.umidadeSolo >= 400 && sensorData.umidadeSolo <= 800) { // Solo úmido
-        sensorData.irrigar = false;
         Serial.println("Solo com umidade adequada. Irrigação desativada.");
     } else { // Solo muito úmido
-        sensorData.irrigar = false;
         Serial.println("Solo muito úmido. Irrigação desativada.");
     }
 }
