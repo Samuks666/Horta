@@ -3,7 +3,7 @@ name: Sync Wiki
 on:
   push:
     paths:
-      - '**/*.md' # Acione o workflow quando arquivos .md forem alterados
+      - '**/*.md'
 
 jobs:
   sync-wiki:
@@ -13,17 +13,26 @@ jobs:
     - name: Checkout código principal
       uses: actions/checkout@v3
 
+    - name: Check if Wiki exists
+      id: check-wiki
+      run: |
+        git ls-remote https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git
+      continue-on-error: true
+
     - name: Checkout da Wiki
+      if: steps.check-wiki.outcome == 'success'
       uses: actions/checkout@v3
       with:
-        repository: ${{ github.repository }}.wiki.git # Faz checkout da Wiki
+        repository: ${{ github.repository }}.wiki.git
         path: wiki
 
     - name: Copiar arquivos .md
+      if: steps.check-wiki.outcome == 'success'
       run: |
         cp -r *.md wiki/
 
     - name: Subir alterações para a Wiki
+      if: steps.check-wiki.outcome == 'success'
       run: |
         cd wiki
         git config user.name "github-actions[bot]"
