@@ -17,9 +17,12 @@ jobs:
       run: |
         git clone https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git wiki
 
-    - name: Copiar arquivos .md para a Wiki
+    - name: Copiar todos os arquivos .md para a Wiki
       run: |
-        cp -r *.md wiki/
+        # Cria a estrutura de pastas na Wiki, se necessário
+        mkdir -p wiki
+        # Copia todos os arquivos .md, preservando a estrutura de diretórios
+        find . -name "*.md" -not -path "./wiki/*" -exec cp --parents {} wiki/ \;
 
     - name: Commit e Push das alterações na Wiki
       run: |
