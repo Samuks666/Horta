@@ -10,21 +10,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout código principal
+    - name: Checkout do repositório principal
       uses: actions/checkout@v3
 
-    - name: Criar diretório wiki (se não existir)
+    - name: Clonar o repositório Wiki
       run: |
-        mkdir -p wiki
+        git clone https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git wiki
 
     - name: Copiar arquivos .md para a Wiki
       run: |
         cp -r *.md wiki/
 
-    - name: Commit e Push das alterações
+    - name: Commit e Push das alterações na Wiki
       run: |
+        cd wiki
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add wiki/
+        git add .
         git commit -m "Atualizando Wiki com base nos arquivos .md do repositório"
         git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
