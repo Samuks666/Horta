@@ -13,33 +13,18 @@ jobs:
     - name: Checkout código principal
       uses: actions/checkout@v3
 
-    - name: Check if Wiki exists
-      id: check-wiki
+    - name: Criar diretório wiki (se não existir)
       run: |
-        if git ls-remote https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git; then
-          echo "wiki_exists=true" >> $GITHUB_ENV
-        else
-          echo "wiki_exists=false" >> $GITHUB_ENV
-        fi
+        mkdir -p wiki
 
-    - name: Checkout da Wiki
-      if: env.wiki_exists == 'true'
-      uses: actions/checkout@v3
-      with:
-        repository: ${{ github.repository }}.wiki.git
-        path: wiki
-
-    - name: Copiar arquivos .md
-      if: env.wiki_exists == 'true'
+    - name: Copiar arquivos .md para a Wiki
       run: |
         cp -r *.md wiki/
 
-    - name: Subir alterações para a Wiki
-      if: env.wiki_exists == 'true'
+    - name: Commit e Push das alterações
       run: |
-        cd wiki
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add .
+        git add wiki/
         git commit -m "Atualizando Wiki com base nos arquivos .md do repositório"
         git push
