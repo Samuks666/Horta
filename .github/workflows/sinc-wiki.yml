@@ -17,21 +17,23 @@ jobs:
       run: |
         git clone https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git wiki
 
-    - name: Limpar o diretório da Wiki
+    - name: Copiar arquivos .md modificados/novos para a Wiki
       run: |
-        find wiki -mindepth 1 -not -name ".git" -exec rm -rf {} +
-
-    - name: Copiar todos os arquivos .md para a Wiki
-      run: |
-        find . -name "*.md" -not -path "./wiki/*" -exec cp --parents {} wiki/ \;
+        # Encontra todos os arquivos .md no repositório principal (exceto na pasta wiki) e copia para a Wiki
+        find . -name "*.md" -not -path "./wiki/*" -exec cp --parents -u {} wiki/ \;
 
     - name: Commit e Push das alterações na Wiki
       run: |
         cd wiki
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add .
-        git commit -m "Sincronizando Wiki com base nos arquivos .md do repositório"
-        git push
+        # Verifica se há alterações antes de fazer commit
+        if [ -n "$(git status --porcelain)" ]; then
+          git add .
+          git commit -m "Sincronizando modificações dos arquivos .md na Wiki"
+          git push
+        else
+          echo "Nenhuma modificação detectada, nada a commitar."
+        fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
