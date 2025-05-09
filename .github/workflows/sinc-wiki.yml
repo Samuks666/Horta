@@ -17,11 +17,12 @@ jobs:
       run: |
         git clone https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git wiki
 
+    - name: Limpar o diretório da Wiki
+      run: |
+        find wiki -mindepth 1 -not -name ".git" -exec rm -rf {} +
+
     - name: Copiar todos os arquivos .md para a Wiki
       run: |
-        # Cria a estrutura de pastas na Wiki, se necessário
-        mkdir -p wiki
-        # Copia todos os arquivos .md, preservando a estrutura de diretórios
         find . -name "*.md" -not -path "./wiki/*" -exec cp --parents {} wiki/ \;
 
     - name: Commit e Push das alterações na Wiki
@@ -30,7 +31,7 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git add .
-        git commit -m "Atualizando Wiki com base nos arquivos .md do repositório"
+        git commit -m "Sincronizando Wiki com base nos arquivos .md do repositório"
         git push
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
