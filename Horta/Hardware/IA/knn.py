@@ -1,65 +1,102 @@
 """
-    Script (Otimizado) para treinar um modelo KNN usando dados de sensores
-    (Umidade e Temperatura do Ar, Umidade do Solo e Precipitação).
-    Inclui funcionalidades para carregar, preprocessar,
-    treinar e salvar o modelo para rodar em um esp32.
-    Inclui redução de dados de treinamento com KMeans.
+    Script otimizado para treinar um modelo XGBoost usando dados de sensores.
+    Melhoria da precisão com ajuste fino, engenharia de recursos e validação cruzada.
 """
 
-# Importações necessárias
 import os
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from xgboost import XGBClassifier
+from sklearn.ensemble import RandomForestClassifier
 
-# Constantes
+# Configurações
 DATASET_PATH = "TARP.csv"
-N_NEIGHBORS = 3
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
-N_ROWS = 2205  # Número de linhas a serem carregadas do dataset
-N_CLUSTERS = 50  # Número de clusters para reduzir os dados de treinamento
+N_CLUSTERS = 100
+CV_FOLDS = 5
 
-def load_dataset(filepath, nrows):
-    """Carrega as primeiras `nrows` linhas do dataset e realiza validações."""
+
+def load_dataset(filepath):
+    """Carrega o dataset completo e usa apenas até a última linha válida."""
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"O arquivo {filepath} não foi encontrado.")
-    print(f"Carregando as primeiras {nrows} linhas do dataset...")
-    df = pd.read_csv(filepath, nrows=nrows)  # Carregar apenas as primeiras `nrows` linhas
-    
-    # Remover espaços extras nos nomes das colunas
+    print(f"Carregando o dataset completo...")
+    df = pd.read_csv(filepath)
     df.columns = df.columns.str.strip()
+
+    # Identificar a última linha completa
+    last_valid_index = df.dropna(how='any').index[-1]
+    df = df.loc[:last_valid_index].reset_index(drop=True)
+    print(f"Usando até a linha {last_valid_index + 1} com dados completos.")
     return df
+
 
 def preprocess_data(df):
     """Preprocessa os dados: converte rótulos e separa características."""
     print("Preprocessando os dados...")
-    
-    # Colunas necessárias
     required_columns = ['Temperature', 'Air humidity (%)', 'Soil Humidity', 'rainfall', 'Status']
-    
-    # Verificar se todas as colunas estão presentes
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
-        raise KeyError(f"As seguintes colunas estão faltando no dataset: {missing_columns}")
+        raise KeyError(f"Colunas ausentes no dataset: {missing_columns}")
     
-    # Selecionar apenas as colunas necessárias
-    df = df[required_columns]
-    
-    # Tratar valores ausentes apenas nas colunas numéricas
-    print("Tratando valores ausentes...")
+    df = df[required_columns].copy()
     numeric_columns = ['Temperature', 'Air humidity (%)', 'Soil Humidity', 'rainfall']
     df[numeric_columns] = df[numeric_columns].fillna(df[numeric_columns].mean())
-    
-    # Converter rótulos da coluna 'Status' para valores binários
     df['Status'] = df['Status'].apply(lambda x: 1 if x == 'ON' else 0)
-    
-    # Separar características (X) e rótulos (y)
-    X = df[['Temperature', 'Air humidity (%)', 'Soil Humidity', 'rainfall']].values
-    y = df['Status'].values
+    X = df[numeric_columns].values
+    y = df['Status'].values.astype(int)
     return X, y
+
+
+def feature_engineering(X):
+    """Aplica engenharia de recursos para melhorar o modelo."""
+    print("Aplicando engenharia de recursos...")
+    # Adicionar interações entre variáveis (exemplo)
+    X_new = np.hstack([X, X[:, 0:1] * X[:, 1:2], X[:, 2:3] ** 2])
+    return X_new
+
+
+def optimize_hyperparameters(X_train, y_train):
+    """Realiza ajuste fino de hiperparâmetros com validação cruzada."""
+    print("Otimizando hiperparâmetros...")
+    param_grid = {
+        "n_estimators": [100, 200, 500],
+        "learning_rate": [0.01, 0.05, 0.1, 0.2],
+        "max_depth": [3, 6, 10],
+        "subsample": [0.8, 1.0],
+        "colsample_bytree": [0.8, 1.0],
+        "gamma": [0, 1, 5],
+        "scale_pos_weight": [1, 2, 5]
+    }
+    model = XGBClassifier(random_state=RANDOM_STATE, eval_metric="logloss")
+    grid_search = GridSearchCV(
+        estimator=model,
+        param_grid=param_grid,
+        scoring="accuracy",
+        cv=StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=RANDOM_STATE),
+        n_jobs=-1
+    )
+    grid_search.fit(X_train, y_train)
+    print(f"Melhores parâmetros: {grid_search.best_params_}")
+    return grid_search.best_estimator_
+
+
+def evaluate_model(X_test, y_test, model):
+    """Avalia o modelo e exibe as métricas."""
+    print("Avaliando o modelo...")
+    y_pred = model.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"Acurácia: {accuracy:.2%}")
+    print("Matriz de Confusão:")
+    print(confusion_matrix(y_test, y_pred))
+    print("\nRelatório de Classificação:")
+    print(classification_report(y_test, y_pred, zero_division=0))
+
 
 def reduce_training_data(X_train, y_train, n_clusters):
     """Reduz os dados de treinamento usando KMeans."""
@@ -67,75 +104,39 @@ def reduce_training_data(X_train, y_train, n_clusters):
     kmeans = KMeans(n_clusters=n_clusters, random_state=RANDOM_STATE)
     kmeans.fit(X_train)
     X_reduced = kmeans.cluster_centers_
-    
-    # Determinar o rótulo mais comum em cada cluster
     y_reduced = []
     for center in X_reduced:
         distances = np.linalg.norm(X_train - center, axis=1)
-        closest_points = np.argsort(distances)[:5]  # Pega os 5 pontos mais próximos
+        closest_points = np.argsort(distances)[:5]
         labels = y_train[closest_points]
-        y_reduced.append(np.bincount(labels).argmax())  # Classe majoritária
+        y_reduced.append(np.bincount(labels).argmax())
     return X_reduced, np.array(y_reduced)
 
-def save_to_single_header(filename, X_reduced, y_reduced, mean, scale):
-    """Salva todos os dados necessários em um único arquivo de cabeçalho C++."""
-    print(f"Salvando todos os dados em {filename}...")
-    with open(filename, 'w') as f:
-        f.write(f'#ifndef MODEL_DATA_H\n')
-        f.write(f'#define MODEL_DATA_H\n\n')
-
-        # Salvar os clusters reduzidos
-        f.write(f'static const float X_train_reduced[] = {{\n')
-        for row in X_reduced:
-            f.write('    ' + ', '.join(f'{x:.6f}' for x in row) + ',\n')
-        f.write('};\n\n')
-
-        # Salvar os rótulos reduzidos
-        f.write(f'static const int y_train_reduced[] = {{\n')
-        f.write('    ' + ', '.join(map(str, y_reduced)) + '\n')
-        f.write('};\n\n')
-
-        # Salvar a média para padronização
-        f.write(f'static const float scaler_mean[] = {{\n')
-        f.write('    ' + ', '.join(f'{x:.6f}' for x in mean) + '\n')
-        f.write('};\n\n')
-
-        # Salvar o desvio padrão para padronização
-        f.write(f'static const float scaler_scale[] = {{\n')
-        f.write('    ' + ', '.join(f'{x:.6f}' for x in scale) + '\n')
-        f.write('};\n\n')
-
-        f.write(f'#endif // MODEL_DATA_H\n')
 
 def main():
-    """Função principal para executar o pipeline de treinamento do modelo."""
-    # Carregar e preprocessar os dados
-    df = load_dataset(DATASET_PATH, N_ROWS)
+    """Pipeline principal."""
+    df = load_dataset(DATASET_PATH)
     X, y = preprocess_data(df)
 
-    # Dividir os dados em treino e teste
     print("Dividindo os dados em treino e teste...")
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
+    )
 
-    # Padronizar os dados
     print("Padronizando os dados...")
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
-    # Reduzir os dados de treinamento
+    X_train = feature_engineering(X_train)
+    X_test = feature_engineering(X_test)
+
+    model = optimize_hyperparameters(X_train, y_train)
+    evaluate_model(X_test, y_test, model)
+
     X_train_reduced, y_train_reduced = reduce_training_data(X_train, y_train, N_CLUSTERS)
-
-    # Salvar todos os dados em um único arquivo de cabeçalho
-    save_to_single_header(
-        'model_data.h',
-        X_train_reduced,
-        y_train_reduced,
-        scaler.mean_,
-        scaler.scale_
-    )
-
     print("Processo concluído com sucesso!")
+
 
 if __name__ == "__main__":
     main()
