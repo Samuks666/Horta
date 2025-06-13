@@ -7,149 +7,98 @@
     - DHT11: Medição de temperatura e umidade do ar.
     - FC-28: Monitoramento da umidade do solo.
     - FC-37: Detecção de chuva.
-    - XXXXX: Medição de pressão atmosférica (não implementado neste exemplo).
+    - BMP-280: Medição de pressão atmosférica (não me parece necessário).
 */
-#include <esp_now.h>
-#include <WiFi.h>
+
 #include <DHT.h>
 
-// Definições de pinos dos sensores
-#define DHTPIN 4                // Pino do sensor de umidade e temp ar DHT11
-#define DHTTYPE DHT11           // Tipo de sensor DHT
-#define SOIL_MOISTURE_PIN 5     // Pino do sensor de umidade do solo FC-28
-#define RAIN_SENSOR_PIN 14      // Pino analógico do sensor de chuva FC-37
-//#define RELAY_PIN 2           // Pino do relé para controle da bomba de irrigação (opcional)
+// Pinos dos sensores
+#define DHTPIN 4
+#define DHTTYPE DHT11
+#define SOIL_MOISTURE_PIN 32
+#define RAIN_SENSOR_PIN 14
+#define RELE_PIN 27
 
-// Inicializando o sensor DHT
 DHT dht(DHTPIN, DHTTYPE);
 
-// Estrutura para enviar dados via ESP-NOW
-typedef struct {
-    float temperatura;
-    float umidadeAr;
-    int umidadeSolo;
-    int valorChuva;
-} SensorData;
+// Número de plantas
+#define N_PLANTAS 6
 
-SensorData sensorData;
+struct Planta {
+  const char* nome;
+  float tempMin, tempMax;
+  float umidArMin, umidArMax;
+  float umidSoloMin, umidSoloMax;
+};
 
-// Endereço MAC do ESP32 receptor
-uint8_t broadcastAddress[] = {0x24, 0x6F, 0x28, 0xAB, 0xCD, 0xEF};
-
-// Variáveis para controle de tempo
-unsigned long lastSensorRead = 0;       // Última leitura dos sensores
-unsigned long lastIrrigationCheck = 0; // Última verificação da lógica de irrigação
-const unsigned long sensorInterval = 2000; // Intervalo de leitura dos sensores (2 segundos)
-const unsigned long irrigationInterval = 12 * 60 * 60 * 1000; // Intervalo de verificação da irrigação (12 horas)
-
-// Funções modularizadas
-
-// Inicializa o ESP-NOW
-void initEspNow() {
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
-
-    if (esp_now_init() != ESP_OK) {
-        Serial.println("Erro ao inicializar ESP-NOW");
-        return;
-    }
-
-    esp_now_register_send_cb([](const uint8_t *mac_addr, esp_now_send_status_t status) {
-        Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Comando enviado com sucesso!" : "Falha no envio do comando!");
-    });
-
-    esp_now_peer_info_t peerInfo;
-    memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-    peerInfo.channel = 0;
-    peerInfo.encrypt = false;
-
-    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-        Serial.println("Erro ao adicionar peer");
-        return;
-    }
-
-    Serial.println("ESP-NOW inicializado.");
-}
-
-// Lê os sensores e atualiza a estrutura `sensorData`
-void readSensors() {
-    sensorData.temperatura = dht.readTemperature();
-    sensorData.umidadeAr = dht.readHumidity();
-
-    if (isnan(sensorData.temperatura) || isnan(sensorData.umidadeAr)) {
-        Serial.println("Erro ao ler o sensor DHT11!");
-        return;
-    }
-
-    sensorData.umidadeSolo = analogRead(SOIL_MOISTURE_PIN);
-    sensorData.valorChuva = analogRead(RAIN_SENSOR_PIN);
-
-    Serial.print("Temperatura: ");
-    Serial.print(sensorData.temperatura);
-    Serial.print(" °C, Umidade do Ar: ");
-    Serial.print(sensorData.umidadeAr);
-    Serial.print(" %, Umidade do Solo: ");
-    Serial.print(sensorData.umidadeSolo);
-    Serial.print(", Nível de Chuva: ");
-    Serial.println(sensorData.valorChuva);
-}
-
-// Executa a lógica de irrigação
-void checkIrrigationLogic() {
-    if (sensorData.valorChuva > 2000) { // Está chovendo
-   
-        Serial.println("Chuva detectada. Irrigação desativada.");
-    } else if (sensorData.umidadeSolo < 400) { // Solo muito seco
-        if (sensorData.temperatura > 22.0 && sensorData.umidadeAr < 60.0) { // Clima quente e seco
-            
-            Serial.println("Condições críticas detectadas. Acionando irrigação...");
-        } else if (sensorData.temperatura > 18.0 && sensorData.umidadeAr < 70.0) { // Clima moderado
-            
-            Serial.println("Condições moderadas detectadas. Acionando irrigação...");
-        } else {
-            
-            Serial.println("Solo seco, mas condições climáticas não justificam irrigação. Irrigação desativada.");
-        }
-    } else if (sensorData.umidadeSolo >= 400 && sensorData.umidadeSolo <= 800) { // Solo úmido
-        Serial.println("Solo com umidade adequada. Irrigação desativada.");
-    } else { // Solo muito úmido
-        Serial.println("Solo muito úmido. Irrigação desativada.");
-    }
-}
-
-// Envia os dados via ESP-NOW
-void sendData() {
-    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&sensorData, sizeof(sensorData));
-    if (result == ESP_OK) {
-        Serial.println("Comando enviado para o receptor.");
-    } else {
-        Serial.println("Erro ao enviar comando.");
-    }
-}
+Planta plantas[N_PLANTAS] = {
+  {"Manjericão", 20, 30, 50, 80, 40, 80},
+  {"Guaco", 18, 30, 60, 90, 50, 80},
+  {"Hortelã", 18, 28, 60, 90, 40, 80},
+  {"Ginseng", 15, 25, 60, 90, 50, 80},
+  {"Cânfora", 20, 30, 40, 70, 40, 75},
+  {"Terramicina", 20, 28, 50, 80, 40, 75}
+};
 
 void setup() {
-    Serial.begin(115200);
+  Serial.begin(115200);
+  dht.begin();
 
-    pinMode(SOIL_MOISTURE_PIN, INPUT);
-    pinMode(RAIN_SENSOR_PIN, INPUT);
+  pinMode(SOIL_MOISTURE_PIN, INPUT);
+  pinMode(RAIN_SENSOR_PIN, INPUT);
+  pinMode(RELE_PIN, OUTPUT);
+  //digitalWrite(RELE_PIN, LOW);
 
-    dht.begin();
-    initEspNow();
+  Serial.println("Sistema de irrigação iniciado.");
 }
 
 void loop() {
-    unsigned long currentMillis = millis();
+  float temperatura = dht.readTemperature();
+  float umidadeAr = dht.readHumidity();
 
-    // Leitura dos sensores a cada 2 segundos
-    if (currentMillis - lastSensorRead >= sensorInterval) {
-        lastSensorRead = currentMillis;
-        readSensors();
-    }
+  if (isnan(temperatura) || isnan(umidadeAr)) {
+    Serial.println("Erro ao ler DHT11.");
+    delay(2000);
+    return;
+  }
 
-    // Verificar a lógica de irrigação apenas uma ou duas vezes ao dia
-    if (currentMillis - lastIrrigationCheck >= irrigationInterval) {
-        lastIrrigationCheck = currentMillis;
-        checkIrrigationLogic();
-        sendData();
+  int leituraSolo = analogRead(SOIL_MOISTURE_PIN);
+  float umidadeSolo = 100.0 - ((float)leituraSolo / 4095.0 * 100.0);
+  if (umidadeSolo < 0) umidadeSolo = 0;
+  if (umidadeSolo > 100) umidadeSolo = 100;
+
+  int leituraChuva = analogRead(RAIN_SENSOR_PIN);
+  float chuva = 1.0 - ((float)leituraChuva / 4095.0);
+
+  Serial.println("---- Leituras ----");
+  Serial.print("Temperatura: "); Serial.print(temperatura); Serial.println(" °C");
+  Serial.print("Umidade do ar: "); Serial.print(umidadeAr); Serial.println(" %");
+  Serial.print("Umidade do solo: "); Serial.print(umidadeSolo); Serial.println(" %");
+  Serial.print("Chuva (0-1): "); Serial.println(chuva);
+  Serial.println("------------------");
+
+  bool precisaIrrigar = false;
+  Serial.print("Plantas que precisam de irrigação: ");
+
+  for (int i = 0; i < N_PLANTAS; i++) {
+    bool soloSeco = umidadeSolo < plantas[i].umidSoloMin;
+
+    if (soloSeco && chuva < 0.7) {
+      precisaIrrigar = true;
+      Serial.print(plantas[i].nome);
+      Serial.print(" | ");
     }
+  }
+
+  Serial.println();
+
+  if (precisaIrrigar) {
+    Serial.println("Acionando irrigação...");
+    //digitalWrite(RELE_PIN, HIGH);  // Liga relé
+  } else {
+    Serial.println("Irrigação desativada.");
+    //digitalWrite(RELE_PIN, LOW);   // Desliga relé
+  }
+
+  delay(2000);
 }
