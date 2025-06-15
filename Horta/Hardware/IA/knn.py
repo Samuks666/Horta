@@ -2,7 +2,6 @@
     Script otimizado para treinar um modelo XGBoost usando dados de sensores.
     Melhoria da precisão com ajuste fino, engenharia de recursos e validação cruzada.
 """
-
 import os
 import pandas as pd
 import numpy as np
@@ -20,6 +19,49 @@ RANDOM_STATE = 42
 N_CLUSTERS = 100
 CV_FOLDS = 5
 
+def save_model_to_header(X_train_reduced, y_train_reduced, scaler_mean, scaler_scale, filename="model_data.h"):
+    with open(filename, "w") as f:
+        f.write("#ifndef MODEL_DATA_H\n")
+        f.write("#define MODEL_DATA_H\n\n")
+
+        # X_train_reduced
+        f.write("static const float X_train_reduced[] = {\n")
+        flat_X = X_train_reduced.flatten()
+        for i, v in enumerate(flat_X):
+            f.write(f"    {v:.6f}")
+            if i < len(flat_X) - 1:
+                f.write(",")
+            if (i + 1) % X_train_reduced.shape[1] == 0:
+                f.write("\n")
+        f.write("};\n\n")
+
+        # y_train_reduced
+        f.write("static const int y_train_reduced[] = {\n    ")
+        for i, v in enumerate(y_train_reduced):
+            f.write(f"{int(v)}")
+            if i < len(y_train_reduced) - 1:
+                f.write(", ")
+            if (i + 1) % 20 == 0:
+                f.write("\n    ")
+        f.write("\n};\n\n")
+
+        # scaler_mean
+        f.write("static const float scaler_mean[] = {\n    ")
+        for i, v in enumerate(scaler_mean):
+            f.write(f"{v:.6f}")
+            if i < len(scaler_mean) - 1:
+                f.write(", ")
+        f.write("\n};\n\n")
+
+        # scaler_scale
+        f.write("static const float scaler_scale[] = {\n    ")
+        for i, v in enumerate(scaler_scale):
+            f.write(f"{v:.6f}")
+            if i < len(scaler_scale) - 1:
+                f.write(", ")
+        f.write("\n};\n\n")
+
+        f.write("#endif // MODEL_DATA_H\n")
 
 def load_dataset(filepath):
     """Carrega o dataset completo e usa apenas até a última linha válida."""
@@ -28,13 +70,10 @@ def load_dataset(filepath):
     print(f"Carregando o dataset completo...")
     df = pd.read_csv(filepath)
     df.columns = df.columns.str.strip()
-
-    # Identificar a última linha completa
     last_valid_index = df.dropna(how='any').index[-1]
     df = df.loc[:last_valid_index].reset_index(drop=True)
     print(f"Usando até a linha {last_valid_index + 1} com dados completos.")
     return df
-
 
 def preprocess_data(df):
     """Preprocessa os dados: converte rótulos e separa características."""
@@ -43,7 +82,6 @@ def preprocess_data(df):
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
         raise KeyError(f"Colunas ausentes no dataset: {missing_columns}")
-    
     df = df[required_columns].copy()
     numeric_columns = ['Temperature', 'Air humidity (%)', 'Soil Humidity', 'rainfall']
     df[numeric_columns] = df[numeric_columns].fillna(df[numeric_columns].mean())
@@ -52,14 +90,11 @@ def preprocess_data(df):
     y = df['Status'].values.astype(int)
     return X, y
 
-
 def feature_engineering(X):
     """Aplica engenharia de recursos para melhorar o modelo."""
     print("Aplicando engenharia de recursos...")
-    # Adicionar interações entre variáveis (exemplo)
     X_new = np.hstack([X, X[:, 0:1] * X[:, 1:2], X[:, 2:3] ** 2])
     return X_new
-
 
 def optimize_hyperparameters(X_train, y_train):
     """Realiza ajuste fino de hiperparâmetros com validação cruzada."""
@@ -85,7 +120,6 @@ def optimize_hyperparameters(X_train, y_train):
     print(f"Melhores parâmetros: {grid_search.best_params_}")
     return grid_search.best_estimator_
 
-
 def evaluate_model(X_test, y_test, model):
     """Avalia o modelo e exibe as métricas."""
     print("Avaliando o modelo...")
@@ -96,7 +130,6 @@ def evaluate_model(X_test, y_test, model):
     print(confusion_matrix(y_test, y_pred))
     print("\nRelatório de Classificação:")
     print(classification_report(y_test, y_pred, zero_division=0))
-
 
 def reduce_training_data(X_train, y_train, n_clusters):
     """Reduz os dados de treinamento usando KMeans."""
@@ -111,7 +144,6 @@ def reduce_training_data(X_train, y_train, n_clusters):
         labels = y_train[closest_points]
         y_reduced.append(np.bincount(labels).argmax())
     return X_reduced, np.array(y_reduced)
-
 
 def main():
     """Pipeline principal."""
@@ -131,12 +163,16 @@ def main():
     X_train = feature_engineering(X_train)
     X_test = feature_engineering(X_test)
 
+    # Reduz e exporta os dados ANTES das métricas
+    X_train_reduced, y_train_reduced = reduce_training_data(X_train, y_train, N_CLUSTERS)
+    save_model_to_header(X_train_reduced, y_train_reduced, scaler.mean_, scaler.scale_, filename="model_data.h")
+
+    # Ajusta hiperparâmetros e avalia
     model = optimize_hyperparameters(X_train, y_train)
     evaluate_model(X_test, y_test, model)
 
-    X_train_reduced, y_train_reduced = reduce_training_data(X_train, y_train, N_CLUSTERS)
     print("Processo concluído com sucesso!")
-
 
 if __name__ == "__main__":
     main()
+
