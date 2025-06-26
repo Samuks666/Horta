@@ -26,7 +26,7 @@ O projeto abrange tanto a parte de hardware (ESP32, sensores) quanto a parte de 
   - Sensores:
       * Umidade e Temperatura do solo
       * Umidade e Temperatura do ar
-      * Chuva
+      * Chuva (precipitação)
       * Pressão
   - Atuadores para controle da irrigação
   
