@@ -29,14 +29,12 @@ const char* accessToken = "SEU_TOKEN_THINGSBOARD";
 // ======= DEFINIÇÕES DE PINOS =======
 #define DHTPIN 4                    // D4 - GPIO 4 (Sensor DHT11)
 #define DHTTYPE DHT11               // Tipo de sensor DHT
-#define SOIL_MOISTURE_PIN 36        // A0 - GPIO 36 (ADC1_CH0 - FC-28)
-#define RAIN_PRECIPITATION_PIN 2    // D2 - GPIO 2 (FC-37 Digital)
-#define RAIN_ANALOG_PIN 35          // A3 - GPIO 35 (FC-37 Analógico)
+#define SOIL_MOISTURE_PIN 35        // A0 - GPIO 36 (ADC1_CH0 - FC-28)
+#define RAIN_ANALOG_PIN 34          // A3 - GPIO 35 (FC-37 Analógico)
 #define LEVEL_SENSOR1_PIN 14       // D14 - GPIO 14 (Sensor nível baixo)
 #define LEVEL_SENSOR2_PIN 27       // D27 - GPIO 27 (Sensor nível alto)
 #define PUMP_PIN 12                // D12 - GPIO 12 (Bomba irrigação)
 #define SOLENOIDE_PIN 13           // D13 - GPIO 13 (Válvula solenoide)
-#define WATER_PUMP_PIN 32          // D32 - GPIO 32 (Bomba abastecimento)
 #define BMP_SDA 21                 // D21 - GPIO 21 (I2C SDA)
 #define BMP_SCL 22                 // D22 - GPIO 22 (I2C SCL)
 
@@ -89,7 +87,6 @@ struct SensorData {
     float umidadeSolo;
     float pressao;
     float altitude;
-    bool chuvaDigital;
     int chuvaAnalogica;
     bool nivelBaixo;
     bool nivelAlto;
@@ -282,7 +279,6 @@ SensorData readAllSensors() {
     data.umidadeSolo = map(soilReading, 0, 4095, 100, 0);
     
     // FC-37 (Sensor de Chuva)
-    data.chuvaDigital = !digitalRead(RAIN_PRECIPITATION_PIN);
     data.chuvaAnalogica = analogRead(RAIN_ANALOG_PIN);
     
     // BMP280
@@ -330,13 +326,13 @@ WaterSystemState readTankLevel() {
 }
 
 void controlWaterSupply(bool turnOn) {
-    digitalWrite(WATER_PUMP_PIN, turnOn ? HIGH : LOW);
+    digitalWrite(SOLENOIDE_PIN, turnOn ? HIGH : LOW);
     
     if (turnOn) {
-        Serial.println("BOMBA DE ABASTECIMENTO LIGADA");
+        Serial.println("ABASTECIMENTO LIGADA");
         tankFillStartTime = millis();
     } else {
-        Serial.println("BOMBA DE ABASTECIMENTO DESLIGADA");
+        Serial.println("ABASTECIMENTO DESLIGADA");
     }
 }
 
@@ -433,7 +429,7 @@ bool shouldIrrigate(const SensorData& data) {
     }
     
     // Não irrigar se estiver chovendo (qualquer modo)
-    bool rainDetected = data.chuvaDigital || (data.chuvaAnalogica < 3000);
+    bool rainDetected = (data.chuvaAnalogica < 3000);
     if (rainDetected) {
         Serial.println("🌧️ CHUVA DETECTADA - Irrigação cancelada");
         return false;
@@ -476,7 +472,6 @@ void sendTelemetry(const SensorData& data, bool irrigationDecision) {
     payload += "\"temperature\":" + String(data.temperatura, 1) + ",";
     payload += "\"humidity\":" + String(data.umidadeAr, 1) + ",";
     payload += "\"soilMoisture\":" + String(data.umidadeSolo, 1) + ",";
-    payload += "\"rainDetected\":" + String(data.chuvaDigital ? "true" : "false") + ",";
     payload += "\"rainIntensity\":" + String(data.chuvaAnalogica) + ",";
     payload += "\"irrigating\":" + String(data.irrigando ? "true" : "false") + ",";
     payload += "\"tankState\":\"" + data.tankStatus + "\",";
@@ -526,19 +521,16 @@ void setup() {
     
     // Configurar pinos
     pinMode(SOIL_MOISTURE_PIN, INPUT);
-    pinMode(RAIN_PRECIPITATION_PIN, INPUT);
     pinMode(RAIN_ANALOG_PIN, INPUT);
     pinMode(LEVEL_SENSOR1_PIN, INPUT);
     pinMode(LEVEL_SENSOR2_PIN, INPUT);
     
     pinMode(PUMP_PIN, OUTPUT);
     pinMode(SOLENOIDE_PIN, OUTPUT);
-    pinMode(WATER_PUMP_PIN, OUTPUT);
     
     // Estado inicial
     digitalWrite(PUMP_PIN, LOW);
     digitalWrite(SOLENOIDE_PIN, LOW);
-    digitalWrite(WATER_PUMP_PIN, LOW);
     
     // Inicializar DHT
     dht.begin();
