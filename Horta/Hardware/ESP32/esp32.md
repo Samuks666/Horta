@@ -2,7 +2,7 @@
 
 O ESP32 é um microcontrolador avançado amplamente utilizado em projetos de IoT devido à sua capacidade de integração com Wi-Fi, Bluetooth e diversos periféricos.
 
-<img src="ESP32.jpg" alt="Microcontrolador ESP32" width="300">
+<img src="ESP32.jpeg" alt="Microcontrolador ESP32" width="300">
 
 # Dados Técnicos do ESP32
 
