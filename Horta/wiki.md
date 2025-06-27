@@ -194,11 +194,3 @@ Documentação completa de todos os componentes de hardware utilizados no sistem
 - **[ESP32 Documentation](https://docs.espressif.com/projects/esp32/)**
 - **[Dataset TARP](https://www.kaggle.com/datasets/nelakurthisudheer/dataset-for-predicting-watering-the-plants)**
 
-### 📖 Documentação Técnica
-- **IEEE 802.11**: Protocolo Wi-Fi
-- **MQTT**: Protocolo de comunicação IoT
-- **JSON**: Formato de dados
-- **KNN Algorithm**: Algoritmo de machine learning
-
----
-
