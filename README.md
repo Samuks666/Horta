@@ -143,13 +143,4 @@ GPIO 13 → Relé válvula
 1. **Modo Automático**: IA decide quando irrigar
 2. **Modo Manual**: Controle direto via ThingsBoard  
 3. **Modo Personalizado**: Regras configuráveis
-4. **Modo Manjericão**: Otimizado para manjericão
-
-## Documentação Completa
-
-Para documentação detalhada de cada componente, consulte:
-- **[Wiki Principal](Horta/wiki.md)** - Documentação completa
-- **[Hardware](Horta/Hardware/Hardware.md)** - Especificações técnicas
-- **[Sistema de IA](Horta/Hardware/IA/IA.md)** - Algoritmo KNN
-- **[Sensores](Horta/Hardware/Sensores/)** - Documentação individual
 
