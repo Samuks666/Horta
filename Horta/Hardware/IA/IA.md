@@ -2,7 +2,6 @@
 
 O sistema de IA utiliza algoritmo KNN (K-Nearest Neighbors) para tomar decisões inteligentes de irrigação baseadas em dados ambientais coletados pelos sensores.
 
-<img src="IA_diagram.png" alt="Diagrama do Sistema de IA" width="300">
 
 # Dados Técnicos do Sistema de IA
 
