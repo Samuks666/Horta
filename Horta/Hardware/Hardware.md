@@ -155,7 +155,7 @@ O ESP32 é o microcontrolador principal do sistema, responsável por:
 - Múltiplos modos de operação
 
 ### 2. Sistema para Manjericão (Sem IA)
-📄 **Arquivo**: `Esp32/esp32_manjericao.cpp`
+📄 **Arquivo**: `Esp32/esp32.cpp`
 - Otimizado especificamente para manjericão
 - Regras baseadas em parâmetros da planta
 - Controle simplificado e eficiente
@@ -206,4 +206,3 @@ Cada sensor possui código de exemplo individual em sua respectiva pasta de docu
 - **[Sensor BMP280](Sensores/BMP280/BMP280.md)** - Pressão Atmosférica
 - **[Sistema de IA](IA/IA.md)** - Inteligência Artificial KNN
 
----

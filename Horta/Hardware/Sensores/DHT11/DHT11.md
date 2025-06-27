@@ -147,7 +147,5 @@ Umidade do Ar: IDEAL
 
 - **Monitoramento Ambiental**: Acompanhar condições climáticas em tempo real
 - **Decisão de Irrigação**: Considerar umidade do ar para otimizar irrigação
-- **Controle de Estufa**: Regular ventilação baseada na temperatura e umidade
-- **Prevenção de Doenças**: Evitar condições favoráveis a fungos (alta umidade)
 - **Economia de Água**: Ajustar irrigação conforme condições atmosféricas
 - **Alerta de Condições Extremas**: Notificar sobre temperaturas ou umidade críticas

@@ -173,4 +173,3 @@ BMP280:
 - 🌧️ **[FC-37](FC-37/FC-37.md)** - Detecção de Chuva
 - 🌤️ **[BMP280](BMP280/BMP280.md)** - Pressão Atmosférica
 - 🔙 **[Hardware Geral](../Hardware.md)** - Voltar para documentação do hardware
-

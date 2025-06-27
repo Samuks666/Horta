@@ -37,7 +37,6 @@ Documentação completa de todos os componentes de hardware utilizados no sistem
 1. **Modo Automático**: IA decide quando irrigar
 2. **Modo Manual**: Controle direto via ThingsBoard
 3. **Modo Personalizado**: Regras específicas por tipo de planta
-4. **Modo Manjericão**: Otimizado para cultivo de manjericão
 
 ---
 
