@@ -114,6 +114,8 @@ GPIO 12 → Relé bomba
 GPIO 13 → Relé válvula
 ```
 
+<img src="Horta.jpg" alt="Diagrama" width="900">
+
 ### 2. Instalação do Software
 - Instalar Arduino IDE
 - Adicionar suporte ao ESP32
