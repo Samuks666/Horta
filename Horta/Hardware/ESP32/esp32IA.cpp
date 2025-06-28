@@ -26,17 +26,17 @@ const char* password = "SUA_SENHA_WIFI";
 const char* thingsboardServer = "demo.thingsboard.io";
 const char* accessToken = "SEU_TOKEN_THINGSBOARD";
 
-// ======= DEFINIÇÕES DE PINOS =======
-#define DHTPIN 4                    // D4 - GPIO 4 (Sensor DHT11)
-#define DHTTYPE DHT11               // Tipo de sensor DHT
-#define SOIL_MOISTURE_PIN 35        // A0 - GPIO 36 (ADC1_CH0 - FC-28)
-#define RAIN_ANALOG_PIN 34          // A3 - GPIO 35 (FC-37 Analógico)
-#define LEVEL_SENSOR1_PIN 14       // D14 - GPIO 14 (Sensor nível baixo)
-#define LEVEL_SENSOR2_PIN 27       // D27 - GPIO 27 (Sensor nível alto)
-#define PUMP_PIN 12                // D12 - GPIO 12 (Bomba irrigação)
-#define SOLENOIDE_PIN 13           // D13 - GPIO 13 (Válvula solenoide)
-#define BMP_SDA 21                 // D21 - GPIO 21 (I2C SDA)
-#define BMP_SCL 22                 // D22 - GPIO 22 (I2C SCL)
+// ======= DEFINIÇÕES DE PINOS CORRIGIDAS =======
+#define DHTTYPE DHT11                // Tipo do sensor DHT
+#define DHTPIN 4                    // GPIO 4 (Digital) - DHT11
+#define SOIL_MOISTURE_PIN 35        // GPIO 35 (ADC1_CH7) - FC-28 
+#define RAIN_ANALOG_PIN 34          // GPIO 34 (ADC1_CH6) - FC-37
+#define LEVEL_SENSOR1_PIN 14        // GPIO 14 (Digital) - Nível baixo 
+#define LEVEL_SENSOR2_PIN 27        // GPIO 27 (Digital) - Nível alto 
+#define PUMP_PIN 12                 // GPIO 12 (Output) - Bomba
+#define SOLENOIDE_PIN 13            // GPIO 13 (Output) - Válvula
+#define BMP_SDA 21                  // GPIO 21 (I2C SDA) - BMP280
+#define BMP_SCL 22                  // GPIO 22 (I2C SCL) - BMP280
 
 // ======= INICIALIZAÇÃO DOS SENSORES =======
 DHT dht(DHTPIN, DHTTYPE);
@@ -70,14 +70,16 @@ IrrigationMode currentMode = MODE_AUTO;
 unsigned long lastTankCheck = 0;
 unsigned long lastTelemetry = 0;
 unsigned long tankFillStartTime = 0;
+unsigned long lastIrrigationCheck = 0;
 bool irrigationBlocked = false;
 bool bmpAvailable = false;
 bool manualIrrigation = false;
 float minSoilHumidity = 30.0;  // Umidade mínima padrão (30%)
 
 // ======= CONSTANTES DE TEMPO =======
-const unsigned long TANK_CHECK_INTERVAL = 2000;
-const unsigned long TELEMETRY_INTERVAL = 30000;  // 30 segundos
+const unsigned long TANK_CHECK_INTERVAL = 10000; // 10 segundos
+const unsigned long TELEMETRY_INTERVAL = 5000;  // 5 segundos
+const unsigned long IRRIGATION_CHECK_INTERVAL = 30000; // 30 segundos
 const unsigned long MAX_FILL_TIME = 300000;      // 5 minutos
 
 // ======= ESTRUTURA DOS DADOS DOS SENSORES =======
@@ -188,30 +190,47 @@ String getModeText() {
     }
 }
 
+bool isTimeElapsed(unsigned long lastTime, unsigned long interval) {
+    return (millis() - lastTime >= interval);
+}
+
 // ======= CONEXÕES =======
 void connectWiFi() {
     WiFi.begin(ssid, password);
     Serial.print("Conectando ao Wi-Fi");
-    while (WiFi.status() != WL_CONNECTED) {
+    unsigned long startAttemptTime = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 30000) { // Timeout de 30 segundos
         delay(1000);
         Serial.print(".");
     }
-    Serial.println("\nWi-Fi conectado!");
-    Serial.println("IP: " + WiFi.localIP().toString());
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\nWi-Fi conectado!");
+        Serial.println("IP: " + WiFi.localIP().toString());
+    } else {
+        Serial.println("\nFalha ao conectar ao Wi-Fi. Reiniciando...");
+        ESP.restart();
+    }
 }
 
 void connectThingsBoard() {
-    while (!client.connected()) {
-        Serial.print("🔗 Conectando ao ThingsBoard...");
+    unsigned int retryCount = 0;
+    while (!client.connected() && retryCount < 5) { // Máximo de 5 tentativas
+        Serial.print("Conectando ao ThingsBoard...");
         if (client.connect("ESP32_IrrigationSystem", accessToken, NULL)) {
-            Serial.println("Connected!");
+            Serial.println("Conectado!");
             client.subscribe("v1/devices/me/rpc/request/+");
             Serial.println("Subscrito aos comandos RPC");
+            return;
         } else {
             Serial.print(" Falhou, código: ");
             Serial.println(client.state());
+            retryCount++;
             delay(3000);
         }
+    }
+    if (!client.connected()) {
+        Serial.println("Falha ao conectar ao ThingsBoard. Reiniciando...");
+        ESP.restart();
     }
 }
 
@@ -269,43 +288,55 @@ int knn_predict(const float *input) {
 // ======= LEITURA DOS SENSORES =======
 SensorData readAllSensors() {
     SensorData data;
-    
+
     // DHT11
     data.temperatura = dht.readTemperature();
     data.umidadeAr = dht.readHumidity();
-    
+
+    // Validar leituras do DHT11
+    if (isnan(data.temperatura) || isnan(data.umidadeAr)) {
+        Serial.println("Erro: Leitura inválida do DHT11. Usando valores padrão.");
+        data.temperatura = -999;  // Valor padrão
+        data.umidadeAr = -999;    // Valor padrão
+    }
+
     // FC-28 (Umidade do Solo)
     int soilReading = analogRead(SOIL_MOISTURE_PIN);
     data.umidadeSolo = map(soilReading, 0, 4095, 100, 0);
-    
+
+    // Validar leituras do FC-28
+    if (data.umidadeSolo < 0 || data.umidadeSolo > 100) {
+        Serial.println("Erro: Leitura inválida do sensor de umidade do solo. Usando valor padrão.");
+        data.umidadeSolo = 50.0;  // Valor padrão
+    }
+
     // FC-37 (Sensor de Chuva)
     data.chuvaAnalogica = analogRead(RAIN_ANALOG_PIN);
-    
+
     // BMP280
     data.bmpOk = false;
     if (bmpAvailable) {
         data.pressao = bmp.readPressure() / 100.0F;
         data.altitude = bmp.readAltitude(1013.25);
         data.bmpOk = true;
-        
-        // Condições climáticas
-        if (data.pressao < 1000) {
-            data.weatherCondition = "TEMPESTADE";
-        } else if (data.pressao > 1020) {
-            data.weatherCondition = "ESTAVEL";
-        } else {
-            data.weatherCondition = "VARIAVEL";
+
+        // Validar leituras do BMP280
+        if (data.pressao < 300 || data.pressao > 1100) {
+            Serial.println("Erro: Leitura inválida do BMP280. Ignorando dados.");
+            data.pressao = -999;  // Valor de erro
+            data.altitude = -999; // Valor de erro
+            data.bmpOk = false;
         }
     }
-    
+
     // Sensores de nível
     data.nivelBaixo = digitalRead(LEVEL_SENSOR1_PIN);
     data.nivelAlto = digitalRead(LEVEL_SENSOR2_PIN);
-    
+
     // Status da irrigação
     data.irrigando = digitalRead(PUMP_PIN);
     data.tankStatus = getTankStateText();
-    
+
     return data;
 }
 
@@ -411,7 +442,6 @@ void controlPump(bool shouldIrrigate) {
     }
     
     digitalWrite(PUMP_PIN, shouldIrrigate ? HIGH : LOW);
-    digitalWrite(SOLENOIDE_PIN, shouldIrrigate ? HIGH : LOW);
     
     if (shouldIrrigate) {
         Serial.println("IRRIGAÇÃO ATIVA - Sistema ligado");
@@ -424,28 +454,15 @@ void controlPump(bool shouldIrrigate) {
 bool shouldIrrigate(const SensorData& data) {
     // PRIORIDADE 1: Comando manual do ThingsBoard
     if (currentMode == MODE_MANUAL) {
-        Serial.println("🎮 MODO MANUAL ATIVO - Comando ThingsBoard");
+        Serial.println("MODO MANUAL ATIVO - Comando ThingsBoard");
         return manualIrrigation;
-    }
-    
-    // Não irrigar se estiver chovendo (qualquer modo)
-    bool rainDetected = (data.chuvaAnalogica < 3000);
-    if (rainDetected) {
-        Serial.println("🌧️ CHUVA DETECTADA - Irrigação cancelada");
-        return false;
-    }
-    
-    // Não irrigar com pressão muito baixa (tempestade)
-    if (data.bmpOk && data.pressao < 995) {
-        Serial.println("🌩️ PRESSÃO BAIXA - Possível tempestade");
-        return false;
     }
     
     // PRIORIDADE 2: Umidade mínima definida pelo usuário
     if (currentMode == MODE_HUMIDITY) {
         bool needsWater = data.umidadeSolo < minSoilHumidity;
         if (needsWater) {
-            Serial.println("🌱 UMIDADE BAIXA - Irrigação necessária (" + 
+            Serial.println("UMIDADE BAIXA - Irrigação necessária (" + 
                           String(data.umidadeSolo) + "% < " + String(minSoilHumidity) + "%)");
         }
         return needsWater;
@@ -461,35 +478,36 @@ bool shouldIrrigate(const SensorData& data) {
     
     int prediction = knn_predict(input_scaled);
     if (prediction == 1) {
-        Serial.println("🤖 IA DECIDIU - Irrigação recomendada");
+        Serial.println("IA DECIDIU - Irrigação recomendada");
     }
     return prediction == 1;
 }
 
 // ======= ENVIO DE TELEMETRIA =======
 void sendTelemetry(const SensorData& data, bool irrigationDecision) {
-    String payload = "{";
-    payload += "\"temperature\":" + String(data.temperatura, 1) + ",";
-    payload += "\"humidity\":" + String(data.umidadeAr, 1) + ",";
-    payload += "\"soilMoisture\":" + String(data.umidadeSolo, 1) + ",";
-    payload += "\"rainIntensity\":" + String(data.chuvaAnalogica) + ",";
-    payload += "\"irrigating\":" + String(data.irrigando ? "true" : "false") + ",";
-    payload += "\"tankState\":\"" + data.tankStatus + "\",";
-    payload += "\"irrigationBlocked\":" + String(irrigationBlocked ? "true" : "false") + ",";
-    payload += "\"currentMode\":\"" + getModeText() + "\",";
-    payload += "\"minSoilHumidity\":" + String(minSoilHumidity) + ",";
-    payload += "\"aiDecision\":" + String(irrigationDecision ? "true" : "false");
-    
+    DynamicJsonDocument doc(1024);
+
+    doc["temperature"] = data.temperatura;
+    doc["humidity"] = data.umidadeAr;
+    doc["soilMoisture"] = data.umidadeSolo;
+    doc["rainIntensity"] = data.chuvaAnalogica;
+    doc["irrigating"] = data.irrigando;
+    doc["tankState"] = data.tankStatus;
+    doc["irrigationBlocked"] = irrigationBlocked;
+    doc["currentMode"] = getModeText();
+    doc["minSoilHumidity"] = minSoilHumidity;
+    doc["aiDecision"] = irrigationDecision;
+
     if (data.bmpOk) {
-        payload += ",\"pressure\":" + String(data.pressao, 1);
-        payload += ",\"altitude\":" + String(data.altitude, 1);
-        payload += ",\"weather\":\"" + data.weatherCondition + "\"";
+        doc["pressure"] = data.pressao;
+        doc["altitude"] = data.altitude;
+        doc["weather"] = data.weatherCondition;
     }
-    
-    payload += "}";
-    
+
+    String payload;
+    serializeJson(doc, payload);
     client.publish("v1/devices/me/telemetry", payload.c_str());
-    Serial.println("📡 Telemetria enviada ao ThingsBoard");
+    Serial.println("Telemetria enviada ao ThingsBoard");
 }
 
 // ======= SETUP =======
@@ -557,49 +575,38 @@ void loop() {
         connectThingsBoard();
     }
     client.loop();
-    
-    // Gerenciar sistema de tanque (AUTOMÁTICO)
-    manageTankSystem();
-    
-    // Ler sensores
-    SensorData sensorData = readAllSensors();
-    
-    // Validar leituras DHT11
-    if (isnan(sensorData.temperatura) || isnan(sensorData.umidadeAr)) {
-        Serial.println("Erro DHT11");
-        delay(5000);
-        return;
-    }
-    
-    // Validar ranges
-    if (sensorData.temperatura < -40 || sensorData.temperatura > 80 || 
-        sensorData.umidadeAr < 0 || sensorData.umidadeAr > 100) {
-        Serial.println("Dados fora do range");
-        delay(5000);
-        return;
-    }
-    
-    // DECISÃO DE IRRIGAÇÃO COM PRIORIDADES
-    bool irrigationDecision = shouldIrrigate(sensorData);
-    
-    // Controlar bomba
-    controlPump(irrigationDecision);
-    
-    // Enviar telemetria (a cada 30 segundos)
+
     unsigned long currentTime = millis();
-    if (currentTime - lastTelemetry >= TELEMETRY_INTERVAL) {
+
+    // Ler sensores uma vez por ciclo
+    SensorData sensorData = readAllSensors();
+
+    // Gerenciar sistema de tanque
+    if (isTimeElapsed(lastTankCheck, TANK_CHECK_INTERVAL)) {
+        manageTankSystem();
+        lastTankCheck = currentTime;
+    }
+
+    // Verificar irrigação
+    bool irrigationDecision = false; // Variável para armazenar a decisão
+    if (isTimeElapsed(lastIrrigationCheck, IRRIGATION_CHECK_INTERVAL)) {
+        if (sensorData.temperatura == -999 || sensorData.umidadeAr == -999) {
+            Serial.println("Erro DHT11");
+            delay(5000);
+            return;
+        }
+
+        irrigationDecision = shouldIrrigate(sensorData);
+        controlPump(irrigationDecision);
+        lastIrrigationCheck = currentTime;
+    }
+
+    // Enviar telemetria
+    if (isTimeElapsed(lastTelemetry, TELEMETRY_INTERVAL)) {
         sendTelemetry(sensorData, irrigationDecision);
         lastTelemetry = currentTime;
     }
-    
-    // Log local
-    Serial.println("STATUS:");
-    Serial.printf("Temp: %.1f°C | Umid.Ar: %.1f%% | Umid.Solo: %.1f%%\n", 
-                  sensorData.temperatura, sensorData.umidadeAr, sensorData.umidadeSolo);
-    Serial.printf("Tanque: %s | Modo: %s | Irrigando: %s\n", 
-                  sensorData.tankStatus.c_str(), getModeText().c_str(), 
-                  sensorData.irrigando ? "SIM" : "NÃO");
-    Serial.println("=======================================");
-    
-    delay(10000);  // 10 segundos
+
+    delay(100);  // Pequeno atraso para evitar sobrecarga
 }
+

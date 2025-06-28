@@ -32,18 +32,16 @@ O ESP32 é um microcontrolador avançado amplamente utilizado em projetos de IoT
 
 ### Pinos GPIO Utilizados no Projeto
 | Pino GPIO | Função no Projeto    | Sensor/Dispositivo        | Tipo      |
-|-----------|---------------------|---------------------------|-----------|
+|-----------|----------------------|---------------------------|-----------|
 | 4         | Dados DHT11         | DHT11                     | Digital   |
-| 36        | Leitura Solo        | FC-28 (Analógico)         | ADC       |
-| 35        | Intensidade Chuva   | FC-37 (Analógico)         | ADC       |
-| 2         | Detecção Chuva      | FC-37 (Digital)           | Digital   |
+| 35        | Leitura Solo        | FC-28 (Analógico)         | ADC       |
+| 34        | Intensidade Chuva   | FC-37 (Analógico)         | ADC       |
 | 21        | I2C SDA             | BMP280                    | I2C       |
 | 22        | I2C SCL             | BMP280                    | I2C       |
 | 14        | Sensor Nível 1      | Nível Baixo Tanque        | Digital   |
 | 27        | Sensor Nível 2      | Nível Alto Tanque         | Digital   |
 | 12        | Bomba Irrigação     | Relé Bomba                | Digital   |
 | 13        | Válvula Solenoide   | Relé Válvula              | Digital   |
-| 32        | Bomba Abastecimento | Relé Bomba Tanque         | Digital   |
 
 ## Componentes Necessários
 - Microcontrolador ESP32 DevKit

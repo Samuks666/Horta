@@ -27,14 +27,17 @@ Esta seção contém a documentação completa de todos os sensores utilizados n
 
 ## 🔧 Pinagem no ESP32
 
-| Sensor | Pino ESP32 | Função | Tipo |
-|--------|------------|--------|------|
-| DHT11 | GPIO 4 | Dados | Digital |
-| FC-28 | GPIO 36 | Umidade Solo | ADC |
-| FC-37 | GPIO 35 | Intensidade Chuva | ADC |
-| FC-37 | GPIO 2 | Detecção Chuva | Digital |
-| BMP280 | GPIO 21 | SDA (I2C) | I2C |
-| BMP280 | GPIO 22 | SCL (I2C) | I2C |
+| Sensor  | Pino ESP32 | Função            | Tipo    |
+|---------|------------|-------------------|---------|
+| DHT11   | GPIO 4     | Dados            | Digital |
+| FC-28   | GPIO 35    | Umidade Solo     | ADC     |
+| FC-37   | GPIO 34    | Intensidade Chuva| ADC     |
+| BMP280  | GPIO 21    | SDA (I2C)        | I2C     |
+| BMP280  | GPIO 22    | SCL (I2C)        | I2C     |
+| Sensor Nível 1 | GPIO 14 | Nível Baixo   | Digital |
+| Sensor Nível 2 | GPIO 27 | Nível Alto    | Digital |
+| Bomba Irrigação | GPIO 12 | Controle     | Digital |
+| Válvula Solenoide | GPIO 13 | Controle   | Digital |
 
 ---
 

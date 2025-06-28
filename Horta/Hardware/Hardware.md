@@ -96,16 +96,14 @@ O ESP32 é o microcontrolador principal do sistema, responsável por:
 | Componente           | Pino ESP32    | Função              | Tipo      |
 |---------------------|---------------|---------------------|-----------|
 | DHT11               | GPIO 4        | Dados               | Digital   |
-| FC-28 (Solo)        | GPIO 36       | Leitura Analógica   | ADC       |
-| FC-37 (Chuva)       | GPIO 35       | Leitura Analógica   | ADC       |
-| FC-37 (Chuva)       | GPIO 2        | Leitura Digital     | Digital   |
+| FC-28 (Solo)        | GPIO 35       | Leitura Analógica   | ADC       |
+| FC-37 (Chuva)       | GPIO 34       | Leitura Analógica   | ADC       |
 | BMP280 (SDA)        | GPIO 21       | Dados I2C           | I2C       |
 | BMP280 (SCL)        | GPIO 22       | Clock I2C           | I2C       |
 | Sensor Nível 1      | GPIO 14       | Nível Baixo         | Digital   |
 | Sensor Nível 2      | GPIO 27       | Nível Alto          | Digital   |
 | Bomba Irrigação     | GPIO 12       | Controle            | Digital   |
 | Válvula Solenoide   | GPIO 13       | Controle            | Digital   |
-| Bomba Abastecimento | GPIO 32       | Controle            | Digital   |
 
 ### Alimentação
 - **ESP32**: 5V via USB ou 3.3V regulada
@@ -204,5 +202,6 @@ Cada sensor possui código de exemplo individual em sua respectiva pasta de docu
 - **[Sensor FC-28](Sensores/FC-28/FC-28.md)** - Umidade do Solo  
 - **[Sensor FC-37](Sensores/FC-37/FC-37.md)** - Detecção de Chuva
 - **[Sensor BMP280](Sensores/BMP280/BMP280.md)** - Pressão Atmosférica
+- **[Esp32](ESP32/esp32.md)** - Microcontrolador
 - **[Sistema de IA](IA/IA.md)** - Inteligência Artificial KNN
 

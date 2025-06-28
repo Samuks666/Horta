@@ -76,14 +76,14 @@ Documentação completa de todos os componentes de hardware utilizados no sistem
 | Pino GPIO | Função              | Sensor/Dispositivo    |
 |-----------|---------------------|-----------------------|
 | 4         | Dados DHT11         | DHT11                 |
-| 36        | Umidade Solo        | FC-28 (Analógico)     |
-| 35        | Intensidade Chuva   | FC-37 (Analógico)     |
-| 2         | Detecção Chuva      | FC-37 (Digital)       |
+| 35        | Umidade Solo        | FC-28 (Analógico)     |
+| 34        | Intensidade Chuva   | FC-37 (Analógico)     |
 | 21        | I2C SDA             | BMP280                |
 | 22        | I2C SCL             | BMP280                |
+| 14        | Nível Baixo         | Sensor Nível 1        |
+| 27        | Nível Alto          | Sensor Nível 2        |
 | 12        | Bomba Irrigação     | Relé                  |
 | 13        | Válvula Solenoide   | Relé                  |
-| 32        | Bomba Abastecimento | Relé                  |
 
 ### ⚡ Consumo de Energia
 - **ESP32**: 240mA (ativo), 10μA (deep sleep)
