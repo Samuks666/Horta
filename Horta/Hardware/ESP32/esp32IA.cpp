@@ -21,10 +21,10 @@
 #include "model_data.h"  // Header com os dados do modelo KNN
 
 // ======= CONFIGURAÇÃO WiFi e ThingsBoard =======
-const char* ssid = "SUA_REDE_WIFI";
-const char* password = "SUA_SENHA_WIFI";
+const char* ssid = "REDE_WIFI";
+const char* password = "SENHA_WIFI";
 const char* thingsboardServer = "demo.thingsboard.io";
-const char* accessToken = "SEU_TOKEN_THINGSBOARD";
+const char* accessToken = "TOKEN_THINGSBOARD";
 
 // ======= DEFINIÇÕES DE PINOS CORRIGIDAS =======
 #define DHTTYPE DHT11                // Tipo do sensor DHT
