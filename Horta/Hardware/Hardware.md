@@ -102,8 +102,8 @@ O ESP32 é o microcontrolador principal do sistema, responsável por:
 | BMP280 (SCL)        | GPIO 22       | Clock I2C           | I2C       |
 | Sensor Nível 1      | GPIO 14       | Nível Baixo         | Digital   |
 | Sensor Nível 2      | GPIO 27       | Nível Alto          | Digital   |
-| Bomba Irrigação     | GPIO 12       | Controle            | Digital   |
-| Válvula Solenoide   | GPIO 13       | Controle            | Digital   |
+| Bomba Irrigação     | GPIO 26       | Controle            | Digital   |
+| Válvula Solenoide   | GPIO 25       | Controle            | Digital   |
 
 ### Alimentação
 - **ESP32**: 5V via USB ou 3.3V regulada

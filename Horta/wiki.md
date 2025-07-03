@@ -82,8 +82,8 @@ Documentação completa de todos os componentes de hardware utilizados no sistem
 | 22        | I2C SCL             | BMP280                |
 | 14        | Nível Baixo         | Sensor Nível 1        |
 | 27        | Nível Alto          | Sensor Nível 2        |
-| 12        | Bomba Irrigação     | Relé                  |
-| 13        | Válvula Solenoide   | Relé                  |
+| 26        | Bomba Irrigação     | Relé                  |
+| 25        | Válvula Solenoide   | Relé                  |
 
 ### ⚡ Consumo de Energia
 - **ESP32**: 240mA (ativo), 10μA (deep sleep)

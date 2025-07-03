@@ -40,8 +40,8 @@ O ESP32 é um microcontrolador avançado amplamente utilizado em projetos de IoT
 | 22        | I2C SCL             | BMP280                    | I2C       |
 | 14        | Sensor Nível 1      | Nível Baixo Tanque        | Digital   |
 | 27        | Sensor Nível 2      | Nível Alto Tanque         | Digital   |
-| 12        | Bomba Irrigação     | Relé Bomba                | Digital   |
-| 13        | Válvula Solenoide   | Relé Válvula              | Digital   |
+| 26        | Bomba Irrigação     | Relé Bomba                | Digital   |
+| 25        | Válvula Solenoide   | Relé Válvula              | Digital   |
 
 ## Componentes Necessários
 - Microcontrolador ESP32 DevKit
