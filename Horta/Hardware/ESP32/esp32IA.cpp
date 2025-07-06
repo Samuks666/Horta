@@ -70,6 +70,7 @@ unsigned long lastTankCheck = 0;
 unsigned long lastTelemetry = 0;
 unsigned long tankFillStartTime = 0;
 unsigned long lastIrrigationCheck = 0;
+unsigned long lastIrrigationEnd = 0;
 unsigned long lastSensorRead = 0;
 bool irrigationBlocked = false;
 bool bmpAvailable = false;
@@ -79,14 +80,15 @@ unsigned long irrigationStartTime = 0;
 bool irrigationActive = false;
 bool thingsboardConnected = false;
 unsigned long lastConnectionAttempt = 0;
-const unsigned long CONNECTION_RETRY_INTERVAL = 60000; // Tentar reconectar a cada 1 minuto
+const unsigned long CONNECTION_RETRY_INTERVAL = 60000;
 
 // ======= CONSTANTES DE TEMPO  =======
 const unsigned long SENSOR_READ_INTERVAL = 2000;     // 2 segundos - Debug
 const unsigned long TELEMETRY_INTERVAL = 5000;       // 5 segundos - Telemetria
 const unsigned long TANK_CHECK_INTERVAL = 10000;     // 10 segundos - Tanque
-const unsigned long IRRIGATION_CHECK_INTERVAL = 30000; // 30 segundos - Irrigação
-const unsigned long MAX_FILL_TIME = 120000;           // 2 minutos - Timeout tanque
+const unsigned long IRRIGATION_CHECK_INTERVAL = 60000; // 1 minuto - Verificação de irrigação
+const unsigned long MIN_INTERVAL_BETWEEN_IRRIGATIONS = 300000; // 5 minutos entre irrigações
+const unsigned long MAX_FILL_TIME = 120000;          // 2 minutos - Timeout tanque
 const unsigned long SENSOR_TIMEOUT = 5000;            // 5 segundos - Timeout sensores
 const unsigned long MAX_IRRIGATION_TIME = 60000;      // 1 minuto máximo
 const unsigned long MIN_IRRIGATION_TIME = 10000;      // 10 segundos mínimo
@@ -110,79 +112,126 @@ struct SensorData {
 
 // ======= CALLBACK RPC DO THINGSBOARD =======
 void callback(char* topic, byte* payload, unsigned int length) {
+    Serial.println("🔔 Callback RPC ativado!");
+    Serial.println("Tópico: " + String(topic));
+    Serial.println("Tamanho payload: " + String(length));
+
     // Converter payload para string
-    String msg = "";
-    for (int i = 0; i < length; i++) {
-        msg += (char)payload[i];
+    String msg = String(payload, length);
+    Serial.println("📨 Comando RPC recebido: " + msg);
+
+    // Verificar se é realmente um comando RPC
+    if (!String(topic).startsWith("v1/devices/me/rpc/request/")) {
+        Serial.println("❌ Tópico não é RPC válido");
+        return;
     }
-    
-    Serial.println("Comando RPC recebido: " + msg);
-    
+
     // Extrair ID da requisição
     String topicStr = String(topic);
     String requestId = topicStr.substring(topicStr.lastIndexOf("/") + 1);
     String responseTopic = "v1/devices/me/rpc/response/" + requestId;
-    
-    // Parse JSON
+
+    Serial.println("🆔 Request ID: " + requestId);
+    Serial.println("📤 Response Topic: " + responseTopic);
+
+    // Parse JSON com verificação de erro
     DynamicJsonDocument doc(1024);
-    deserializeJson(doc, msg);
-    
+    DeserializationError error = deserializeJson(doc, msg);
+    if (error) {
+        Serial.println("❌ Erro ao fazer parse do JSON: " + String(error.c_str()));
+        String errorResponse = "{\"error\":\"Invalid JSON format\"}";
+        client.publish(responseTopic.c_str(), errorResponse.c_str());
+        return;
+    }
+
+    // Verificar se contém o campo method
+    if (!doc.containsKey("method")) {
+        Serial.println("❌ Comando sem campo 'method'");
+        String errorResponse = "{\"error\":\"Missing method field\"}";
+        client.publish(responseTopic.c_str(), errorResponse.c_str());
+        return;
+    }
+
     String method = doc["method"];
     String response = "{}";
-    
+
+    Serial.println("🎯 Método chamado: " + method);
+
     // Comandos disponíveis
     if (method == "getSystemStatus") {
-        // Retorna status completo do sistema
         response = "{\"tankState\":\"" + getTankStateText() + "\",";
-        response += "\"irrigating\":" + String(digitalRead(PUMP_PIN) ? "true" : "false") + ",";
+        response += "\"irrigating\":" + String(isPumpOn() ? "true" : "false") + ",";
         response += "\"mode\":\"" + getModeText() + "\",";
         response += "\"minHumidity\":" + String(minSoilHumidity) + "}";
-        
     } else if (method == "setManualIrrigation") {
-        // Comando manual de irrigação
-        bool enable = doc["params"]["enable"];
-        manualIrrigation = enable;
-        currentMode = enable ? MODE_MANUAL : MODE_AUTO;
-        
-        // Controlar bomba imediatamente no modo manual
-        if (currentMode == MODE_MANUAL) {
-            controlSmartPump(manualIrrigation);
+        if (!doc.containsKey("params") || !doc["params"].containsKey("enable")) {
+            response = "{\"success\":false,\"error\":\"Missing enable parameter\"}";
         } else {
-            controlSmartPump(false); // Parar se sair do modo manual
+            bool enable = doc["params"]["enable"];
+            manualIrrigation = enable;
+            currentMode = enable ? MODE_MANUAL : MODE_AUTO;
+            controlSmartPump(enable);
+            response = "{\"success\":true,\"manualMode\":" + String(enable ? "true" : "false") + "}";
         }
-        
-        Serial.println("Modo manual: " + String(enable ? "ATIVADO" : "DESATIVADO"));
-        response = "{\"success\":true,\"manualMode\":" + String(enable ? "true" : "false") + "}";
-        
     } else if (method == "setMinHumidity") {
-        // Define umidade mínima (integrada no modo automático)
-        float newMinHumidity = doc["params"]["humidity"];
-        if (newMinHumidity >= 0 && newMinHumidity <= 100) {
-            minSoilHumidity = newMinHumidity;
-            // Não muda o modo - continua no automático
-            Serial.println("Nova umidade mínima: " + String(minSoilHumidity) + "% (Integrada no modo AUTO)");
-            response = "{\"success\":true,\"minHumidity\":" + String(minSoilHumidity) + "}";
+        if (!doc.containsKey("params") || !doc["params"].containsKey("humidity")) {
+            response = "{\"success\":false,\"error\":\"Missing humidity parameter\"}";
         } else {
-            response = "{\"success\":false,\"error\":\"Invalid humidity range\"}";
+            float newMinHumidity = doc["params"]["humidity"];
+            if (newMinHumidity >= 0 && newMinHumidity <= 100) {
+                minSoilHumidity = newMinHumidity;
+                response = "{\"success\":true,\"minHumidity\":" + String(minSoilHumidity) + "}";
+            } else {
+                response = "{\"success\":false,\"error\":\"Invalid humidity range\"}";
+            }
         }
-        
     } else if (method == "setAutoMode") {
-        // Volta para modo automático (IA + Umidade)
         currentMode = MODE_AUTO;
         manualIrrigation = false;
-        Serial.println("Modo automático (IA + Umidade) ativado");
         response = "{\"success\":true,\"mode\":\"auto\"}";
-        
     } else if (method == "emergencyStop") {
-        // Parada de emergência
         controlSmartPump(false);
         manualIrrigation = false;
-        Serial.println("PARADA DE EMERGÊNCIA ATIVADA");
         response = "{\"success\":true,\"stopped\":true}";
+    } else {
+        response = "{\"success\":false,\"error\":\"Unknown method\"}";
     }
-    
+
     // Enviar resposta
-    client.publish(responseTopic.c_str(), response.c_str());
+    if (client.publish(responseTopic.c_str(), response.c_str())) {
+        Serial.println("✅ Resposta RPC enviada com sucesso");
+    } else {
+        Serial.println("❌ Falha ao enviar resposta RPC");
+    }
+}
+
+// ===== FUNÇÕES DE CONTROLE DOS RELÉS LOW LEVEL =====
+void turnOnPump() {
+    digitalWrite(PUMP_PIN, LOW);  // LOW para ativar relé
+    Serial.println("💧 BOMBA LIGADA (LOW level)");
+}
+
+void turnOffPump() {
+    digitalWrite(PUMP_PIN, HIGH); // HIGH para desativar relé
+    Serial.println("💧 BOMBA DESLIGADA (HIGH level)");
+}
+
+bool isPumpOn() {
+    return digitalRead(PUMP_PIN) == LOW; // LOW significa bomba ligada
+}
+
+void turnOnSolenoid() {
+    digitalWrite(SOLENOIDE_PIN, LOW);  // LOW para ativar relé
+    Serial.println("🚰 VÁLVULA LIGADA (LOW level)");
+}
+
+void turnOffSolenoide(){
+    digitalWrite(SOLENOIDE_PIN, HIGH); // HIGH para desativar relé
+    Serial.println("🚰 VÁLVULA DESLIGADA (HIGH level)");
+}
+
+bool isSolenoidOn() {
+    return digitalRead(SOLENOIDE_PIN) == LOW; // LOW significa válvula ligada
 }
 
 // ======= FUNÇÕES AUXILIARES =======
@@ -402,7 +451,7 @@ SensorData readAllSensors() {
     data.nivelAlto = digitalRead(LEVEL_SENSOR2_PIN);
 
     // Status da irrigação
-    data.irrigando = digitalRead(PUMP_PIN);
+    data.irrigando = isPumpOn();
     data.tankStatus = getTankStateText();
 
     return data;
@@ -490,18 +539,26 @@ WaterSystemState readTankLevel() {
     bool level2 = digitalRead(LEVEL_SENSOR2_PIN);  // Nível alto
     
     if (!level1 && !level2) {
+        Serial.println("DEBUG: TANQUE VAZIO detectado");
         return TANK_EMPTY;
     } else if (level1 && !level2) {
+        Serial.println("DEBUG: TANQUE BAIXO detectado");
         return TANK_LOW;
     } else if (level1 && level2) {
+        Serial.println("DEBUG: TANQUE CHEIO detectado");
         return TANK_FULL;
     } else {
+        Serial.println("DEBUG: Estado inválido - assumindo VAZIO");
         return TANK_EMPTY;
     }
 }
 
 void controlWaterSupply(bool turnOn) {
-    digitalWrite(SOLENOIDE_PIN, turnOn ? HIGH : LOW);
+    if (turnOn) {
+        turnOnSolenoid();
+    } else {
+        turnOffSolenoid();
+    }
     
     if (turnOn) {
         Serial.println("ABASTECIMENTO LIGADA");
@@ -512,66 +569,84 @@ void controlWaterSupply(bool turnOn) {
 }
 
 void manageTankSystem() {
-    unsigned long currentTime = millis();
-    
-    if (currentTime - lastTankCheck >= TANK_CHECK_INTERVAL) {
-        WaterSystemState currentLevel = readTankLevel();
-        lastTankCheck = currentTime;
-        
-        switch (tankState) {
-            case TANK_OK:
-            case TANK_FULL:
-                if (currentLevel == TANK_LOW) {
-                    Serial.println("NÍVEL BAIXO - Iniciando abastecimento automático");
-                    tankState = TANK_FILLING;
-                    controlWaterSupply(true);
-                    irrigationBlocked = false;
-                } else if (currentLevel == TANK_EMPTY) {
-                    Serial.println("TANQUE VAZIO - Bloqueando irrigação");
-                    tankState = TANK_EMPTY;
-                    controlWaterSupply(true);
-                    irrigationBlocked = true;
-                } else {
-                    tankState = TANK_OK;
-                    irrigationBlocked = false;
-                }
-                break;
-                
-            case TANK_LOW:
-                if (currentLevel == TANK_FULL) {
-                    Serial.println("TANQUE CHEIO - Parando abastecimento automático");
-                    tankState = TANK_FULL;
-                    controlWaterSupply(false);
-                    irrigationBlocked = false;
-                } else if (currentLevel == TANK_EMPTY) {
-                    tankState = TANK_EMPTY;
-                    irrigationBlocked = true;
-                }
-                break;
-                
-            case TANK_EMPTY:
-                if (currentLevel == TANK_LOW || currentLevel == TANK_FULL) {
-                    tankState = (currentLevel == TANK_FULL) ? TANK_FULL : TANK_LOW;
-                    if (currentLevel == TANK_FULL) {
-                        controlWaterSupply(false);
-                    }
-                    irrigationBlocked = false;
-                }
-                break;
-                
-            case TANK_FILLING:
-                if (currentLevel == TANK_FULL) {
-                    Serial.println("ABASTECIMENTO AUTOMÁTICO CONCLUÍDO - Sensor 2 atingido");
-                    tankState = TANK_FULL;
-                    controlWaterSupply(false);  // DESLIGA AUTOMATICAMENTE
-                    irrigationBlocked = false;
-                } else if (currentTime - tankFillStartTime > MAX_FILL_TIME) {
-                    Serial.println("TIMEOUT - Sistema de abastecimento");
-                    controlWaterSupply(false);
-                    tankState = TANK_LOW;
-                }
-                break;
+    WaterSystemState currentLevel = readTankLevel();
+
+    // FORÇAR PARADA DE IRRIGAÇÃO SE TANQUE VAZIO
+    if (currentLevel == TANK_EMPTY) {
+        if (irrigationActive) {
+            Serial.println("🚨 EMERGÊNCIA: Parando irrigação - TANQUE VAZIO!");
+            turnOffPump();
+            irrigationActive = false;
         }
+        irrigationBlocked = true;
+        tankState = TANK_EMPTY;
+        controlWaterSupply(true); // Tentar reabastecer
+        return;
+    }
+    
+    switch (tankState) {
+        case TANK_OK:
+        case TANK_FULL:
+            if (currentLevel == TANK_LOW) {
+                Serial.println("NÍVEL BAIXO - Iniciando abastecimento automático");
+                tankState = TANK_FILLING;
+                controlWaterSupply(true);
+                irrigationBlocked = false;
+            } else if (currentLevel == TANK_EMPTY) {
+                Serial.println("TANQUE VAZIO - Bloqueando irrigação");
+                tankState = TANK_EMPTY;
+                controlWaterSupply(true);
+                irrigationBlocked = true;
+                // Forçar parada da bomba se estiver ligada
+                if (irrigationActive) {
+                    turnOffPump();
+                    irrigationActive = false;
+                }
+            } else {
+                tankState = TANK_OK;
+                irrigationBlocked = false;
+            }
+            break;
+            
+        case TANK_LOW:
+            if (currentLevel == TANK_FULL) {
+                Serial.println("TANQUE CHEIO - Parando abastecimento automático");
+                tankState = TANK_FULL;
+                controlWaterSupply(false);
+                irrigationBlocked = false;
+            } else if (currentLevel == TANK_EMPTY) {
+                tankState = TANK_EMPTY;
+                irrigationBlocked = true;
+                // Forçar parada da bomba se estiver ligada
+                if (irrigationActive) {
+                    turnOffPump();
+                    irrigationActive = false;
+                }
+            }
+            break;
+            
+        case TANK_EMPTY:
+            if (currentLevel == TANK_LOW || currentLevel == TANK_FULL) {
+                tankState = (currentLevel == TANK_FULL) ? TANK_FULL : TANK_LOW;
+                if (currentLevel == TANK_FULL) {
+                    controlWaterSupply(false);
+                }
+                irrigationBlocked = false;
+            }
+            break;
+            
+        case TANK_FILLING:
+            if (currentLevel == TANK_FULL) {
+                Serial.println("ABASTECIMENTO AUTOMÁTICO CONCLUÍDO - Sensor 2 atingido");
+                tankState = TANK_FULL;
+                controlWaterSupply(false);  // DESLIGA AUTOMATICAMENTE
+                irrigationBlocked = false;
+            } else if (millis() - tankFillStartTime > MAX_FILL_TIME) {
+                Serial.println("TIMEOUT - Sistema de abastecimento");
+                controlWaterSupply(false);
+                tankState = TANK_LOW;
+            }
+            break;
     }
 }
 
@@ -582,14 +657,26 @@ void controlSmartPump(bool shouldStart) {
     // Verificar se irrigação está bloqueada por falta de água
     if (shouldStart && irrigationBlocked) {
         Serial.println("IRRIGAÇÃO BLOQUEADA - Tanque vazio");
-        digitalWrite(PUMP_PIN, LOW);
+        turnOffPump();
         irrigationActive = false;
         return;
     }
     
+    // NOVA VERIFICAÇÃO - Verificar intervalo mínimo entre irrigações (apenas para novas irrigações)
+    if (shouldStart && !irrigationActive && lastIrrigationEnd > 0) {
+        unsigned long timeSinceLastIrrigation = currentTime - lastIrrigationEnd;
+        if (timeSinceLastIrrigation < MIN_INTERVAL_BETWEEN_IRRIGATIONS) {
+            unsigned long remainingTime = (MIN_INTERVAL_BETWEEN_IRRIGATIONS - timeSinceLastIrrigation) / 1000;
+            Serial.println("⏰ IRRIGAÇÃO BLOQUEADA - Aguardar " + String(remainingTime) + " segundos (intervalo de 5 min)");
+            turnOffPump();
+            irrigationActive = false;
+            return;
+        }
+    }
+    
     // INICIAR IRRIGAÇÃO
     if (shouldStart && !irrigationActive) {
-        digitalWrite(PUMP_PIN, HIGH);
+        turnOnPump();
         irrigationActive = true;
         irrigationStartTime = currentTime;
         Serial.println("🚿 IRRIGAÇÃO INICIADA - Monitorando umidade...");
@@ -598,8 +685,9 @@ void controlSmartPump(bool shouldStart) {
     
     // PARAR IRRIGAÇÃO (comando externo)
     if (!shouldStart && irrigationActive) {
-        digitalWrite(PUMP_PIN, LOW);
+        turnOffPump();
         irrigationActive = false;
+        lastIrrigationEnd = currentTime; // NOVA LINHA - Registrar quando a irrigação terminou
         Serial.println("🛑 IRRIGAÇÃO INTERROMPIDA - Comando externo");
         return;
     }
@@ -625,19 +713,19 @@ void controlSmartPump(bool shouldStart) {
                 shouldStop = true;
                 stopReason = "Umidade desejada atingida (" + String(currentData.umidadeSolo) + "% >= " + String(minSoilHumidity + HUMIDITY_TOLERANCE) + "%)";
             }
-            // Verificar se umidade está muito alta (segurança)
-            else if (currentData.umidadeSolo >= 80.0) {
-                shouldStop = true;
-                stopReason = "Umidade muito alta detectada (" + String(currentData.umidadeSolo) + "%)";
-            }
         }
         
-        // PARAR IRRIGAÇÃO
+        // CONDIÇÃO 3: Tanque vazio (emergência)
+        if (tankState == TANK_EMPTY) {
+            shouldStop = true;
+            stopReason = "Tanque vazio - irrigação de emergência interrompida";
+        }
+        
         if (shouldStop) {
-            digitalWrite(PUMP_PIN, LOW);
+            turnOffPump();
             irrigationActive = false;
-            Serial.println("✅ IRRIGAÇÃO FINALIZADA - " + stopReason);
-            Serial.println("   Duração: " + String(irrigationDuration/1000) + " segundos");
+            lastIrrigationEnd = currentTime; // NOVA LINHA - Registrar quando a irrigação terminou
+            Serial.println("🛑 IRRIGAÇÃO FINALIZADA - " + stopReason);
         }
     }
 }
@@ -648,6 +736,16 @@ bool shouldIrrigate(const SensorData& data) {
     if (data.temperatura == -999 || data.umidadeAr == -999) {
         Serial.println("ERRO: Dados inválidos dos sensores - Irrigação bloqueada");
         return false;
+    }
+    
+    // NOVA VERIFICAÇÃO - Verificar intervalo mínimo entre irrigações
+    if (lastIrrigationEnd > 0) {
+        unsigned long timeSinceLastIrrigation = millis() - lastIrrigationEnd;
+        if (timeSinceLastIrrigation < MIN_INTERVAL_BETWEEN_IRRIGATIONS) {
+            unsigned long remainingTime = (MIN_INTERVAL_BETWEEN_IRRIGATIONS - timeSinceLastIrrigation) / 1000;
+            Serial.println("⏰ Aguardando intervalo de segurança: " + String(remainingTime) + " segundos restantes");
+            return false;
+        }
     }
     
     // PRIORIDADE 1: Comando manual do ThingsBoard (apenas se conectado)
@@ -665,6 +763,11 @@ bool shouldIrrigate(const SensorData& data) {
     // MODO AUTOMÁTICO: Combina IA + Umidade mínima
     
     // PRIORIDADE 2: Umidade crítica (sempre irriga se muito baixa)
+    Serial.println("🔍 VERIFICAÇÃO DE UMIDADE:");
+    Serial.println("   - Umidade solo atual: " + String(data.umidadeSolo) + "%");
+    Serial.println("   - Umidade mínima definida: " + String(minSoilHumidity) + "%");
+    Serial.println("   - Comparação: " + String(data.umidadeSolo) + " < " + String(minSoilHumidity) + " = " + String(data.umidadeSolo < minSoilHumidity ? "VERDADEIRO" : "FALSO"));
+    
     if (data.umidadeSolo < minSoilHumidity) {
         String modeText = thingsboardConnected ? "ONLINE" : "OFFLINE";
         Serial.println("🌱 UMIDADE CRÍTICA (" + modeText + ") - Irrigação prioritária (" + 
@@ -714,7 +817,7 @@ void sendTelemetry(const SensorData& data, bool irrigationDecision) {
     doc["minSoilHumidity"] = minSoilHumidity;
     doc["aiDecision"] = irrigationDecision;
     doc["offlineMode"] = false; // Indicar que está online
-    
+
     // Adicionar informações de tempo se irrigando
     if (irrigationActive) {
         unsigned long duration = (millis() - irrigationStartTime) / 1000;
@@ -730,7 +833,7 @@ void sendTelemetry(const SensorData& data, bool irrigationDecision) {
 
     String payload;
     serializeJson(doc, payload);
-    
+
     if (client.publish("v1/devices/me/telemetry", payload.c_str())) {
         Serial.println("📡 Telemetria enviada ao ThingsBoard");
     } else {
@@ -763,17 +866,37 @@ void setup() {
     
     // Inicializar I2C e BMP280
     Wire.begin(BMP_SDA, BMP_SCL);
-    if (!bmp.begin(0x76) && !bmp.begin(0x77)) {
-        Serial.println("BMP280 não encontrado");
-        bmpAvailable = false;
-    } else {
-        Serial.println("BMP280 inicializado");
+    delay(100); // Aguardar estabilizar
+    
+    // Tentar múltiplos endereços e configurações
+    bmpAvailable = false;
+    if (bmp.begin(0x76)) {
+        Serial.println("BMP280 inicializado no endereço 0x76");
         bmpAvailable = true;
+    } else if (bmp.begin(0x77)) {
+        Serial.println("BMP280 inicializado no endereço 0x77");
+        bmpAvailable = true;
+    } else {
+        Serial.println("⚠️ BMP280 não encontrado - Continuando sem sensor de pressão");
+        bmpAvailable = false;
+    }
+    
+    if (bmpAvailable) {
         bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,
                        Adafruit_BMP280::SAMPLING_X2,
                        Adafruit_BMP280::SAMPLING_X16,
                        Adafruit_BMP280::FILTER_X16,
                        Adafruit_BMP280::STANDBY_MS_500);
+        delay(100); // Aguardar configuração
+        
+        // Teste de leitura
+        float testPressure = bmp.readPressure() / 100.0F;
+        if (testPressure < 300 || testPressure > 1100) {
+            Serial.println("⚠️ BMP280 com leituras inválidas - Desabilitando");
+            bmpAvailable = false;
+        } else {
+            Serial.println("✅ BMP280 funcionando corretamente");
+        }
     }
     
     // Configurar pinos
@@ -786,8 +909,8 @@ void setup() {
     pinMode(SOLENOIDE_PIN, OUTPUT);
     
     // Estado inicial
-    digitalWrite(PUMP_PIN, LOW);
-    digitalWrite(SOLENOIDE_PIN, LOW);
+    turnOffPump();
+    turnOffSolenoid();
     
     // Inicializar DHT
     dht.begin();
@@ -795,7 +918,16 @@ void setup() {
     // Estado inicial do tanque
     tankState = readTankLevel();
     
+    // INICIALIZAR TEMPOS PARA EVITAR IRRIGAÇÃO IMEDIATA
+    unsigned long currentTime = millis();
+    lastTankCheck = currentTime;
+    lastTelemetry = currentTime;
+    lastIrrigationCheck = currentTime + IRRIGATION_CHECK_INTERVAL; // PRIMEIRA VERIFICAÇÃO EM 1 MINUTO
+    lastSensorRead = currentTime;
+    lastConnectionAttempt = currentTime;
+    
     Serial.println("Sistema inicializado com sucesso!");
+    Serial.println("⏰ Primeira verificação de irrigação em: " + String(IRRIGATION_CHECK_INTERVAL/1000) + " segundos (1 minuto)");
     
     if (thingsboardConnected) {
         Serial.println("📡 MODO ONLINE ATIVO");
@@ -813,6 +945,32 @@ void setup() {
         Serial.println("   - Tentará reconectar automaticamente");
     }
     Serial.println("=======================================");
+    
+    // EXIBIR VALORES INICIAIS DAS VARIÁVEIS CRÍTICAS
+    Serial.println("\n🔧 CONFIGURAÇÕES INICIAIS:");
+    Serial.println("==========================================");
+    Serial.println("💧 Umidade mínima do solo: " + String(minSoilHumidity) + "%");
+    Serial.println("⏰ Intervalo de verificação: " + String(IRRIGATION_CHECK_INTERVAL/1000) + " segundos (1 minuto)");
+    Serial.println("⏱️ Tempo mínimo de irrigação: " + String(MIN_IRRIGATION_TIME/1000) + " segundos");
+    Serial.println("⏱️ Tempo máximo de irrigação: " + String(MAX_IRRIGATION_TIME/1000) + " segundos");
+    Serial.println("⏳ Intervalo mínimo entre irrigações: " + String(MIN_INTERVAL_BETWEEN_IRRIGATIONS/1000) + " segundos (5 minutos)");
+    Serial.println("🎛️ Modo inicial: " + getModeText());
+    Serial.println("🔧 Irrigação manual: " + String(manualIrrigation ? "ATIVADA" : "DESATIVADA"));
+    Serial.println("🌐 ThingsBoard: " + String(thingsboardConnected ? "CONECTADO" : "DESCONECTADO"));
+    Serial.println("==========================================");
+    
+    Serial.println("🕐 Aguardando estabilização dos sensores...");
+    delay(2000); // Aguardar estabilização
+    
+    // TESTE INICIAL DOS SENSORES APÓS ESTABILIZAÇÃO
+    Serial.println("\n🧪 TESTE INICIAL DOS SENSORES:");
+    Serial.println("==========================================");
+    SensorData initialData = readAllSensors();
+    Serial.println("📊 Temperatura: " + String(initialData.temperatura) + "°C");
+    Serial.println("📊 Umidade do ar: " + String(initialData.umidadeAr) + "%");
+    Serial.println("📊 Umidade do solo: " + String(initialData.umidadeSolo) + "% (Limite: " + String(minSoilHumidity) + "%)");
+    Serial.println("📊 Deve irrigar: " + String((initialData.umidadeSolo < minSoilHumidity) ? "SIM" : "NÃO"));
+    Serial.println("==========================================");
     
     delay(2000);
 }
@@ -866,7 +1024,8 @@ void loop() {
             lastIrrigationCheck = currentTime;
             
             String modeText = thingsboardConnected ? "ONLINE" : "OFFLINE";
-            Serial.println("=== VERIFICAÇÃO DE IRRIGAÇÃO (" + modeText + ") EXECUTADA ===");
+            Serial.println("=== VERIFICAÇÃO DE IRRIGAÇÃO (" + modeText + ") EXECUTADA (1 minuto) ===");
+            Serial.println("Próxima verificação em: " + String(IRRIGATION_CHECK_INTERVAL/1000) + " segundos");
         }
     }
 
@@ -878,11 +1037,9 @@ void loop() {
         lastTelemetry = currentTime;
     }
 
-    // === Gerenciar sistema de tanque a cada 10 segundos ===
-    if (isTimeElapsed(lastTankCheck, TANK_CHECK_INTERVAL)) {
-        manageTankSystem();
-        lastTankCheck = currentTime;
-    }
+    // === Gerenciar sistema de tanque SEMPRE (crítico) ===
+    manageTankSystem();
 
     delay(100); // Pequeno delay para estabilidade
 }
+
